@@ -1,0 +1,40 @@
+name: CI & Windows Release
+
+on:
+  push:
+    branches: [main, "arena/*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-core-and-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run C++ core unit tests
+        run: |
+          mkdir -p tests/bin
+          gcc -O2 -DSQLITE_THREADSAFE=1 -c vendor/sqlite3/sqlite3.c -o tests/bin/sqlite3.o
+          g++ -std=c++17 -O2 -Wall -Wextra -Isrc/core -Ivendor/sqlite3 \
+            tests/test_core.cpp src/core/db.cpp tests/bin/sqlite3.o \
+            -lpthread -ldl -o tests/bin/test_core
+          ./tests/bin/test_core
+      - name: Run UI & i18n tests
+        run: node tests/test_ui.cjs
+      - name: Cross-compile TypeCount.exe via Zig
+        run: |
+          python3 -m pip install --quiet ziglang
+          ZIG_BIN="$(python3 -c 'import ziglang, pathlib; print(pathlib.Path(ziglang.__file__).parent / "zig")')"
+          ZIG_BIN="$ZIG_BIN" bash scripts/build_windows.sh
+      - name: Upload TypeCount.exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeCount-windows-x64
+          path: releases/TypeCount.exe

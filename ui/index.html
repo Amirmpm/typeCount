@@ -1,0 +1,348 @@
+<!doctype html>
+<html data-mac-titlebar="false" lang="en" dir="ltr" data-platform="windows">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>TypeCount</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="dropdown.css">
+  <link rel="stylesheet" href="history.css">
+  <link rel="stylesheet" href="insights.css">
+  <link rel="stylesheet" href="compact.css">
+  <link rel="stylesheet" href="sport.css">
+  <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="typecount-ext.css">
+</head>
+<body>
+<aside class="sidebar" id="app-sidebar">
+  <div class="brand">
+    <span class="brand-icon"><img src="typecount-mark.png" alt="" aria-hidden="true"></span>
+    <div>TypeCount<small lang="en" translate="no">Keyboard &amp; Mouse</small></div>
+  </div>
+  <nav aria-label="Main navigation" data-i18n-aria="nav.main">
+    <button data-page="overview" class="selected">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 21v-6m7 6V9m7 12V3"/></svg></span>
+      <span data-i18n="page.overview">Overview</span>
+    </button>
+    <button data-page="history">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
+      <span data-i18n="page.history">History</span>
+    </button>
+    <button data-page="keys">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg></span>
+      <span data-i18n="page.heatmap">Heatmap</span>
+    </button>
+    <button data-page="apps">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></span>
+      <span data-i18n="page.apps">Applications</span>
+    </button>
+    <button data-page="shortcuts">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M11 2 5 11h5l-1 7 6-10h-5Z" stroke-width="1.4"/></svg></span>
+      <span data-i18n="page.shortcuts">Shortcuts</span>
+    </button>
+    <button data-page="share">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></span>
+      <span data-i18n="nav.share">Report</span>
+    </button>
+    <button id="settings-nav" data-page="settings" aria-expanded="false" aria-controls="settings-subnav">
+      <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m9.5 3-.5 2-2 1-2-.5-2 3.5L4.5 11v2L3 15l2 3.5 2-.5 2 1 .5 2h5l.5-2 2-1 2 .5 2-3.5-1.5-2v-2L21 9l-2-3.5-2 .5-2-1-.5-2Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+      <span data-i18n="page.settings">Settings</span>
+    </button>
+    <div id="settings-subnav" class="settings-subnav" hidden>
+      <button data-settings-section="personalization-settings" data-i18n="settings.personalization">Personalization</button>
+      <button data-settings-section="handoff-settings" data-i18n="nav.migration" hidden>Migration</button>
+      <button data-settings-section="capture-settings" data-i18n="nav.recording">Recording</button>
+      <button data-settings-section="storage-settings" data-i18n="nav.storage">Data</button>
+      <button data-settings-section="app-settings" data-i18n="settings.app">Application</button>
+    </div>
+  </nav>
+  <div class="sidebar-bottom">
+    <span class="sidebar-project">
+      <button type="button" id="project-home" class="project-home" aria-label="TypeCount · GitHub" title="TypeCount · GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </button>
+      <span>TypeCount</span>
+    </span>
+    <span class="sidebar-version">1.0.0</span>
+  </div>
+</aside>
+<div class="workspace">
+  <header>
+    <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="app-sidebar" aria-label="Collapse sidebar" title="Collapse sidebar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path id="sidebar-toggle-arrow" d="m16 9-3 3 3 3"/></svg>
+    </button>
+    <h1 id="toolbar-title" data-i18n="page.overview" class="toolbar-title">Overview</h1>
+    <div class="header-actions">
+      <span id="demo-badge" hidden><span data-i18n="common.demo">Demo data</span></span>
+      <button class="button" id="tc-stealth-header-btn" title="Hide completely (no tray icon)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" style="width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6"><path d="M2 8s2.5-4 6-4 6 4 6 4-2.5 4-6 4-6-4-6-4Z"/><circle cx="8" cy="8" r="1.8"/><path d="M3 13 13 3"/></svg>
+        <span data-i18n="stealth.enter">Enter Stealth Mode</span>
+      </button>
+      <button class="button primary" id="compact">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3 3 13"/></svg>
+        <span data-i18n="action.mini">Mini mode</span>
+      </button>
+      <div class="window-controls" aria-label="Window controls" data-i18n-aria="window.controls">
+        <button id="window-minimize" class="window-control" aria-label="Minimize" data-i18n-aria="window.minimize" title="Minimize" data-i18n-title="window.minimize"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+        <button id="window-maximize" class="window-control" aria-label="Maximize" data-i18n-aria="window.maximize" title="Maximize" data-i18n-title="window.maximize"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="window-maximize-glyph" d="M3 3h10v10H3Z"/></svg></button>
+        <button id="window-close" class="window-control close" aria-label="Close window" data-i18n-aria="window.close" title="Close window" data-i18n-title="window.close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
+      </div>
+    </div>
+  </header>
+  <main>
+  <div class="content">
+    <div class="page-heading"><div id="page-title" role="heading" aria-level="1"><span data-i18n="page.overview">Overview</span></div></div>
+    <section id="star-notice" class="star-notice" aria-labelledby="star-title" hidden>
+      <div role="status"><strong id="star-title" data-i18n="star.title">Enjoying TypeCount?</strong><p data-i18n="star.description">If TypeCount has been useful, a star on GitHub helps others find it.</p></div>
+      <div class="star-actions"><button type="button" class="button" id="star-dismiss" data-i18n="star.dismiss">Dismiss</button><button type="button" class="button" id="star-open" data-i18n="star.open">Open GitHub</button></div>
+    </section>
+    <div class="banner" id="permission-banner" hidden><div><strong><span id="permission-title" data-i18n="permission.title">Input Monitoring required</span><span id="permission-updated-title" data-i18n="permission.updated_title" hidden></span></strong><p><span data-i18n="permission.description"></span></p><p id="permission-reset" data-i18n="permission.reset_hint"></p></div><button class="button primary" id="permission"><span data-i18n="action.authorize">Grant access</span></button></div>
+    <div class="banner error" id="error-banner" hidden></div>
+    <div class="banner" id="data-operation-status" role="status" aria-live="polite" hidden><p id="data-operation-message" data-i18n="storage.processing"></p></div>
+
+    <!-- OVERVIEW -->
+    <section class="page" id="overview">
+      <div class="metrics">
+        <article class="metric featured"><div class="metric-label"><span id="today-label" data-i18n="metric.today">Today</span></div><div class="metric-number" id="today">—</div><div class="metric-details" id="today-detail"></div></article>
+        <article class="metric"><div class="metric-label"><span data-i18n="metric.week">Last 7 days</span></div><div class="metric-number" id="week">—</div><div class="metric-details" id="week-detail"></div></article>
+        <article class="metric"><div class="metric-label"><span data-i18n="metric.lifetime">Total activity</span></div><div class="metric-number" id="lifetime">—</div><div class="metric-details" id="lifetime-detail"></div></article>
+      </div>
+
+      <div class="tc-strip">
+        <article class="tc-stat-card">
+          <div class="tc-stat-head"><span data-i18n="speed.wpm">Live typing</span><span id="tc-peak-wpm">Peak today: 0 WPM</span></div>
+          <div class="tc-stat-main"><strong id="tc-live-wpm">0.0</strong><span class="tc-stat-unit" data-i18n="speed.wpm_unit">WPM</span></div>
+          <div class="tc-stat-sub"><span id="tc-live-cpm">0 CPM</span><span id="tc-today-scroll">0 scrolls</span></div>
+        </article>
+        <article class="tc-stat-card">
+          <div class="tc-stat-head"><span data-i18n="goal.title">Daily goal &amp; streak</span><span class="tc-streak-pill" id="tc-streak-pill">0 day streak</span></div>
+          <div class="tc-stat-main"><strong id="tc-goal-pct">0%</strong></div>
+          <div class="tc-progress-track"><div class="tc-progress-fill" id="tc-goal-fill"></div></div>
+          <div class="tc-stat-sub"><span id="tc-goal-text">0 / 8,000</span></div>
+        </article>
+        <article class="tc-stat-card tc-break-card" id="tc-break-card">
+          <div class="tc-stat-head"><span data-i18n="speed.odometer">Mouse odometer</span><span id="tc-break-text">Active 0 min</span></div>
+          <div class="tc-stat-main"><strong id="tc-today-distance">0.0</strong><span class="tc-stat-unit">m</span></div>
+          <div class="tc-break-actions"><span class="tc-stat-sub" id="tc-break-hint"></span><button type="button" class="tc-mini-btn" id="tc-break-reset" data-i18n="break.take">Reset break timer</button></div>
+        </article>
+      </div>
+
+      <article class="live card"><div><span class="live-dot"></span><strong><span data-i18n="live.title">Live counts</span></strong></div><div id="windows" class="windows"></div><button class="button" id="pause"><span data-i18n="action.pause">Pause recording</span></button></article>
+      <article class="card hourly-card">
+        <div class="card-heading"><div><h2 data-i18n="chart.hourly">Hourly activity · 24 hours</h2><p id="hourly-range"></p></div><strong id="hourly-total" class="hourly-total"></strong></div>
+        <div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">Keyboard</span><span class="mouse-dot"></span><span data-i18n="common.mouse">Mouse</span></div>
+        <div id="hourly-chart" class="chart hourly-chart" role="group" data-i18n-aria="chart.hourly"></div>
+        <p id="hourly-detail" class="hourly-detail"></p>
+      </article>
+      <div class="chart-grid">
+        <article class="card trend"><div class="card-heading"><div><h2><span data-i18n="chart.trend">Daily trend</span></h2></div><div class="segments" id="trend-range"><button class="selected" data-range="14" data-i18n="common.days" data-count="14">14 days</button><button data-range="30" data-i18n="common.days" data-count="30">30 days</button><button data-range="90" data-i18n="common.days" data-count="90">90 days</button></div></div><div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">Keyboard</span><span class="mouse-dot"></span><span data-i18n="common.mouse">Mouse</span></div><div id="trend-chart" class="chart"></div></article>
+        <article class="card composition"><div class="card-heading"><div><h2><span data-i18n="chart.composition">Activity mix</span></h2></div></div><div id="donut"></div><div id="composition-legend"></div></article>
+      </div>
+      <article class="card heatmap-card"><div class="card-heading"><div><h2><span data-i18n="chart.calendar">Activity calendar</span></h2></div><div class="calendar-heading-right"><span id="calendar-aside" class="calendar-aside" hidden></span><div class="range-controls"><span class="quiet" id="active-days"></span><select id="calendar-range-select" aria-label="Calendar range" data-i18n-aria="chart.calendar.range_label"><option value="365" hidden selected data-i18n="common.past_year">Past year</option></select></div></div></div><div id="heatmap"></div><div class="heatmap-footer"><span id="calendar-range"></span><span><span data-i18n="common.low">Low </span><i class="heat-level level-0"></i><i class="heat-level level-1"></i><i class="heat-level level-2"></i><i class="heat-level level-3"></i><i class="heat-level level-4"></i><span data-i18n="common.high"> High</span></span></div></article>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="page" id="history" hidden>
+      <article class="card"><div class="card-heading"><div><h2><span data-i18n="history.title">Daily records</span></h2><p id="history-range"><span data-i18n="common.all_history">All history</span></p></div><div class="range-controls"><select id="history-range-select" aria-label="History range" data-i18n-aria="history.range_label"><option value="all" data-i18n="common.all_history">All history</option></select></div></div><p class="history-summary" id="history-summary"></p><div class="legend"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">Keyboard</span><span class="mouse-dot"></span><span data-i18n="common.mouse">Mouse</span></div><div id="history-chart" class="chart tall"></div>
+        <section class="history-scatter" aria-labelledby="scatter-title">
+          <div class="scatter-heading">
+            <h3 id="scatter-title" data-i18n="scatter.title">Hourly input distribution</h3>
+            <div id="scatter-weekdays" class="keyboard-mode scatter-weekdays" role="group" data-i18n-aria="scatter.weekdays"></div>
+            <div class="scatter-devices">
+              <button type="button" id="scatter-keyboard" aria-pressed="true"><i aria-hidden="true"></i><span data-i18n="common.keyboard">Keyboard</span></button>
+              <button type="button" id="scatter-mouse" aria-pressed="true"><i aria-hidden="true"></i><span data-i18n="common.mouse">Mouse</span></button>
+            </div>
+          </div>
+          <div class="scatter-frame">
+            <canvas id="scatter-plot" role="img" tabindex="0" aria-labelledby="scatter-title" aria-describedby="scatter-keys"></canvas>
+            <output id="scatter-tip" hidden></output>
+            <p id="scatter-status" role="status" hidden></p>
+          </div>
+          <span id="scatter-keys" class="sr-only" data-i18n="scatter.keys"></span>
+          <div class="scatter-range" id="scatter-range" role="group" data-i18n-aria="scatter.range" hidden>
+            <div id="scatter-track" class="scatter-track"><div id="scatter-peaks" class="scatter-peaks" aria-hidden="true"></div><div class="scatter-selection" aria-hidden="true"></div><span id="scatter-from" class="scatter-handle" role="slider" tabindex="0" aria-controls="scatter-plot" data-i18n-aria="scatter.from"></span><span id="scatter-to" class="scatter-handle" role="slider" tabindex="0" aria-controls="scatter-plot" data-i18n-aria="scatter.to"></span></div>
+            <span id="scatter-period" class="scatter-period"></span>
+          </div>
+        </section>
+        <div class="table-wrap"><table><thead><tr><th><span data-i18n="history.date">Date</span></th><th><span data-i18n="common.keyboard">Keyboard</span></th><th><span data-i18n="common.mouse">Mouse</span></th><th><span data-i18n="history.total">Total</span></th></tr></thead><tbody id="history-table"></tbody></table></div><div class="history-pagination"><span id="history-page-info"></span><div><button class="button" id="history-prev"><span aria-hidden="true">← </span><span data-i18n="action.previous">Previous</span></button><button class="button" id="history-next"><span data-i18n="action.next">Next</span><span aria-hidden="true"> →</span></button></div></div></article>
+    </section>
+
+    <!-- KEYBOARD & MOUSE HEATMAPS -->
+    <section class="page" id="keys" hidden>
+      <article class="card keyboard-card">
+        <div class="card-heading keyboard-heading"><div><h2><span data-i18n="common.keyboard">Keyboard</span></h2></div><div class="keyboard-actions"><div id="keyboard-layout-mode" class="keyboard-mode" role="group" aria-label="Keyboard layout" data-i18n-aria="settings.keyboard_layout"><button type="button" id="keyboard-compact" aria-pressed="true" aria-controls="keyboard-layout" data-i18n="keys.layout_compact">Default</button><button type="button" id="keyboard-full" aria-pressed="false" aria-controls="keyboard-layout" data-i18n="keys.layout_full">With numpad</button></div><button class="button" id="keyboard-view-toggle" aria-pressed="false" aria-controls="keyboard-layout keyboard-treemap"><svg id="keyboard-blocks-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h7v7H2zM11 2h3v7h-3zM2 11h7v3H2zM11 11h3v3h-3z"/></svg><svg id="keyboard-layout-icon" viewBox="0 0 16 16" aria-hidden="true" hidden><rect x="1.5" y="3.5" width="13" height="9" rx="2"/><path d="M4 6h.5M7 6h.5M10 6h.5M4 8.5h.5M7 8.5h.5M10 8.5h.5M5 10.5h6"/></svg><span id="keyboard-view-label" data-i18n="keys.show_treemap">Treemap</span></button></div></div>
+        <div class="keyboard-scroll"><div id="keyboard-layout" class="keyboard-layout" aria-label="Keyboard activity heatmap" data-i18n-aria="keys.layout"></div></div>
+        <div id="keyboard-treemap" class="keyboard-treemap" aria-label="Key usage treemap" data-i18n-aria="keys.treemap" hidden></div>
+        <div class="keyboard-bottom"><span class="keyboard-scale"><span data-i18n="common.low">Low </span><i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><i class="level-4"></i><span data-i18n="common.high"> High</span></span></div>
+      </article>
+      <section class="heatmap-mouse" id="mouse" aria-labelledby="mouse-heading">
+        <article class="card"><div class="card-heading"><h2 id="mouse-heading" data-i18n="common.mouse">Mouse</h2></div><div class="mouse-breakdown"><div id="mouse-diagram"></div><div class="mouse-statistics"><div id="mouse-chart"></div><div id="mouse-distribution"></div></div></div></article>
+      </section>
+    </section>
+
+    <!-- APPLICATIONS + FOCUS TIMER -->
+    <section class="page" id="apps" hidden>
+      <article class="card tc-focus-card" style="margin-bottom:18px;">
+        <div>
+          <h2 data-i18n="focus.title" style="margin:0 0 4px;">Focus timer</h2>
+          <p class="tc-stat-sub" style="margin:0;" id="tc-life-distance"></p>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span class="tc-focus-clock" id="tc-focus-clock">25:00</span>
+          <button type="button" class="button primary" id="tc-focus-btn" data-i18n="focus.start">Start 25m Focus</button>
+        </div>
+      </article>
+      <article class="card">
+        <div class="tc-apps-head">
+          <div>
+            <h2 data-i18n="apps.title" style="margin:0 0 4px;">Activity by application</h2>
+            <p class="tc-stat-sub" style="margin:0;" data-i18n="apps.subtitle">Only foreground process names are logged — never window titles or typed text.</p>
+          </div>
+          <div class="segments">
+            <button type="button" id="tc-apps-today-btn" class="selected" data-i18n="apps.today">Today</button>
+            <button type="button" id="tc-apps-life-btn" data-i18n="apps.lifetime">All time</button>
+          </div>
+        </div>
+        <div class="legend" style="margin-top:14px;"><span class="keyboard-dot"></span><span data-i18n="common.keyboard">Keyboard</span><span class="mouse-dot"></span><span data-i18n="common.mouse">Mouse</span></div>
+        <div id="tc-apps-list" class="tc-apps-list"></div>
+        <p id="tc-apps-empty" class="insight-note" data-i18n="apps.empty" hidden></p>
+      </article>
+    </section>
+
+    <!-- SHORTCUTS -->
+    <section class="page" id="shortcuts" hidden>
+      <div id="shortcut-loading" class="insight-empty" role="status" data-i18n="common.loading" hidden>Loading…</div>
+      <article id="shortcut-dashboard" class="card shortcut-dashboard"><div class="card-heading shortcut-card-heading"><h2 data-i18n="shortcuts.ranking">Most-used combinations</h2><button type="button" class="button shortcut-atlas-link" id="shortcut-atlas"><span data-i18n="shortcuts.library">Shortcut encyclopedia</span><span aria-hidden="true"> ↗</span></button></div><div id="shortcut-ranking" class="shortcut-ranking"></div></article>
+      <article id="shortcut-details" class="card shortcut-details"><div class="insight-toolbar"><h2 id="shortcut-details-title" data-i18n="shortcuts.details">All combinations</h2><div class="insight-search"><input type="search" id="shortcut-search" maxlength="100" autocomplete="off" spellcheck="false"></div></div>
+      <div id="shortcut-list" class="shortcut-list"></div><button type="button" class="button shortcut-more" id="shortcut-more" hidden></button><p class="insight-note" data-i18n="shortcuts.note"></p></article>
+    </section>
+
+    <!-- REPORT -->
+    <section class="page" id="share" hidden>
+      <div class="share-workspace" id="share-workspace"><article class="card share-controls"><div class="report-period" role="group" data-i18n-aria="nav.share"><button type="button" data-report-period="daily" aria-pressed="true" data-i18n="report.daily">Daily</button><button type="button" data-report-period="weekly" aria-pressed="false" data-i18n="report.weekly">Weekly</button></div>
+        <div id="share-dates">
+          <div id="share-start-field" hidden><label id="share-start-label" for="share-start-trigger"><span data-i18n="report.start_date">Start date</span></label><div class="share-date"><input id="share-start" type="date" data-numeric-date="true" hidden tabindex="-1" aria-hidden="true"><button type="button" id="share-start-trigger" class="share-date-trigger" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="share-start-label share-start-value" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M6.5 2.5v3m7-3v3M3 8.5h14M6.5 12h.01m3.49 0h.01m3.49 0h.01"/></svg><span id="share-start-value"></span><svg class="date-picker-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div></div>
+          <div><label id="share-date-label" for="share-date-trigger"><span id="share-date-caption">Date</span></label><div class="share-date"><input id="share-date" type="date" hidden tabindex="-1" aria-hidden="true"><button type="button" id="share-date-trigger" class="share-date-trigger" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="share-date-label share-date-value" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M6.5 2.5v3m7-3v3M3 8.5h14M6.5 12h.01m3.49 0h.01m3.49 0h.01"/></svg><span id="share-date-value"></span><svg class="date-picker-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button></div></div>
+        </div>
+        <label for="share-style-select-trigger" data-i18n="share.style">Card style</label>
+        <select id="share-style-select" aria-label="Card style" data-i18n-aria="share.style">
+          <option value="blue" data-swatch="#2459a2" data-i18n="share.blue">Blue</option>
+          <option value="paper" data-swatch="#e8e3d7" data-i18n="share.paper">Paper</option>
+          <option value="ink" data-swatch="#102543" data-i18n="share.ink">Ink</option>
+          <option value="pine" data-swatch="#31664e" data-i18n="share.pine">Pine</option>
+          <option value="clay" data-swatch="#984d28" data-i18n="share.clay">Terracotta</option>
+          <option value="lavender" data-swatch="#70538c" data-i18n="share.lavender">Lavender</option>
+          <option value="rose" data-swatch="#99495c" data-i18n="share.rose">Rose</option>
+        </select>
+      <div class="share-actions"><button class="button primary" id="share-save" data-i18n="share.save" disabled>Save PNG</button><button class="button" id="share-copy" data-i18n="share.copy" hidden disabled>Copy image</button></div>
+      <details class="share-prompt" id="share-prompt-panel">
+        <summary><span data-i18n="report_prompt.open">Want a different design? Try an AI prompt</span></summary>
+        <p data-i18n="report_prompt.intro"></p>
+        <textarea lang="en" id="share-prompt-text" disabled rows="6" aria-label="Report design prompt" data-i18n-aria="report_prompt.label"></textarea>
+        <div class="share-actions"><button type="button" class="button" id="share-prompt-copy" data-i18n="report_prompt.copy" disabled>Copy prompt</button><button type="button" class="button" id="share-prompt-regenerate" aria-controls="share-prompt-text" data-i18n="report_prompt.regenerate" disabled>Regenerate</button></div>
+      </details></article><div class="share-preview"><div class="share-deck" id="share-deck" tabindex="0" role="region" data-i18n-aria="share.style"><button type="button" class="share-peek share-peek-prev" id="share-card-prev" tabindex="-1"><span class="share-peek-corner" aria-hidden="true"></span><span class="share-peek-top" aria-hidden="true"><i></i><b></b></span><span class="share-peek-num" aria-hidden="true"></span><span class="share-peek-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="share-peek-name" id="share-prev-name"></span></button><button type="button" class="share-peek share-peek-next" id="share-card-next" tabindex="-1"><span class="share-peek-corner" aria-hidden="true"></span><span class="share-peek-top" aria-hidden="true"><i></i><b></b></span><span class="share-peek-num" aria-hidden="true"></span><span class="share-peek-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="share-peek-name" id="share-next-name"></span></button><div class="share-stage" id="share-stage"><canvas id="share-canvas" width="1080" height="1350" role="img" data-i18n-aria="share.preview"></canvas></div><button type="button" class="share-deck-nav share-deck-prev" id="share-deck-prev" data-i18n-aria="action.previous"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8 10 12.5"/></svg></button><button type="button" class="share-deck-nav share-deck-next" id="share-deck-next" data-i18n-aria="action.next"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></button></div><div class="share-deck-dots" id="share-deck-dots" role="group" data-i18n-aria="share.style"></div><p id="share-empty" class="insight-note" data-i18n="share.empty" hidden></p></div></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" id="settings" hidden>
+      <article class="card settings-card personalization-card" id="personalization-settings" tabindex="-1">
+        <h2 data-i18n="settings.personalization">Personalization</h2>
+        <div class="setting-row"><div><strong data-i18n="settings.ui_scale">Font size</strong></div><select id="ui-scale-select" data-i18n-aria="settings.ui_scale"><option value="80">80%</option><option value="90">90%</option><option value="100" selected>100%</option><option value="115">115%</option><option value="130">130%</option><option value="150">150%</option></select></div>
+        <div class="setting-row"><div><strong data-i18n="settings.theme">Theme</strong></div><select id="theme-select" aria-label="Theme" data-i18n-aria="settings.theme"><option value="blue" data-i18n="theme.blue">Blue</option><option value="teal" data-i18n="theme.teal">Teal</option><option value="violet" data-i18n="theme.violet">Violet</option><option value="graphite" data-i18n="theme.graphite">Graphite</option></select></div>
+        <div class="setting-row"><div><strong data-i18n="sport.setting_title">Sport mode</strong></div><input type="checkbox" role="switch" class="preference-switch" id="sport-visible" aria-label="Sport mode" data-i18n-aria="sport.setting_title"></div>
+        <div class="setting-row"><div><strong data-i18n="goal.setting_title">Daily activity goal</strong><p data-i18n="goal.setting_desc">Target keystrokes + clicks per day</p></div><input type="number" id="tc-daily-goal-input" class="tc-input" min="500" max="500000" step="500" value="8000"></div>
+        <div class="setting-row"><div><strong data-i18n="break.setting_title">Break reminder interval</strong></div><select id="tc-break-interval-select"><option value="0" data-i18n="break.off">Off</option><option value="20">20 min</option><option value="45" selected>45 min</option><option value="60">60 min</option></select></div>
+        <div class="setting-row"><div><strong data-i18n="dpi.title">Monitor pixel density (PPI)</strong><p data-i18n="dpi.desc"></p></div><input type="number" id="tc-dpi-input" class="tc-input" min="72" max="320" step="2" value="96"></div>
+      </article>
+
+      <article class="card settings-card" id="handoff-settings" tabindex="-1" hidden><h2><span data-i18n="settings.migration">Migration</span></h2><div class="setting-row"><div><strong data-i18n="settings.takeover"></strong><p id="handoff-description"></p></div><button class="button primary" id="takeover" disabled><span data-i18n="action.takeover"></span></button></div></article>
+
+      <article class="card settings-card" id="capture-settings" tabindex="-1">
+        <h2><span data-i18n="settings.recording">Recording and access</span></h2>
+        <div class="setting-row" id="permission-row" hidden><div><strong data-i18n="settings.permission">Capture status</strong><p id="permission-description"></p><p id="permission-reset-settings" hidden></p></div><button class="button" id="settings-permission"><span data-i18n="action.permissions"></span></button></div>
+        <div class="setting-row" id="ignore-software-row"><div class="setting-label"><strong id="ignore-software-label" data-i18n="settings.ignore_software_input">Ignore software-generated keystrokes</strong><span class="setting-help"><button type="button" class="setting-help-button" aria-labelledby="ignore-software-label" aria-describedby="ignore-software-help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 1.5-2.5 3M12 16.5h.01"/></svg></button><span class="setting-help-text" id="ignore-software-help" role="tooltip" data-i18n="settings.ignore_software_input_help"></span></span></div><input type="checkbox" role="switch" class="preference-switch" id="ignore-software-input" aria-label="Ignore software-generated keystrokes" data-i18n-aria="settings.ignore_software_input"></div>
+        <div class="setting-row"><div><strong data-i18n="apps.track_title">Track activity per application</strong><p data-i18n="apps.track_desc"></p></div><input type="checkbox" role="switch" class="preference-switch" id="tc-track-apps-switch" checked></div>
+        <div class="setting-row"><div><strong data-i18n="stealth.title">Stealth background mode</strong><p data-i18n="stealth.desc"></p></div><button type="button" class="button" id="tc-stealth-enter" data-i18n="stealth.enter">Enter Stealth Mode</button></div>
+        <div class="setting-row"><div><strong data-i18n="stealth.hotkey">Global wake hotkey</strong></div><select id="tc-wake-hotkey-select"><option value="Ctrl+Alt+Shift+T">Ctrl + Alt + Shift + T</option><option value="Ctrl+Alt+K">Ctrl + Alt + K</option><option value="Ctrl+Shift+F12">Ctrl + Shift + F12</option><option value="Alt+Shift+T">Alt + Shift + T</option><option value="None">Off</option></select></div>
+      </article>
+
+      <article class="card settings-card" id="storage-settings" tabindex="-1">
+        <h2 data-i18n="storage.title">Data management</h2>
+        <div class="setting-row"><div><strong data-i18n="settings.location">Data location</strong><p id="db-description" hidden></p><p id="db-path" class="path"></p></div><div class="setting-actions"><button class="button" id="storage-directory" data-i18n="action.choose_directory">Change folder</button><button class="button" id="reveal" data-i18n="action.reveal">Open folder</button></div></div>
+        <div class="setting-row"><div><strong data-i18n="export.title">Export &amp; Auto-Backup</strong><p data-i18n="export.auto_backup_desc"></p></div><div class="setting-actions"><button class="button" id="tc-export-csv" data-i18n="export.csv">Export CSV</button><button class="button" id="tc-export-json" data-i18n="export.json">Export JSON</button><button class="button" id="tc-backup-now" data-i18n="export.backup_now">Backup now</button></div></div>
+        <div class="setting-row"><div><strong data-i18n="export.auto_backup">Automatic daily backup</strong></div><input type="checkbox" role="switch" class="preference-switch" id="tc-auto-backup-switch" checked></div>
+        <div class="setting-row" id="import-history-row"><div><strong data-i18n="storage.import_title">Import history</strong><p data-i18n="storage.import_description"></p></div><button class="button" id="import-history" data-i18n="action.import_database">Import database</button></div>
+      </article>
+
+      <article class="card settings-card" id="app-settings" tabindex="-1">
+        <h2><span data-i18n="settings.app">Application</span></h2>
+        <div class="setting-row"><div><strong data-i18n="settings.language">Language</strong></div><select id="language-select" aria-label="Language" data-i18n-aria="settings.language"><option value="en" selected>English</option><option value="fa">فارسی (Persian)</option><option value="system" data-i18n="language.system">System default</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></div>
+        <div class="setting-row"><div class="setting-label"><strong id="today-period-label" data-i18n="settings.today_period">Counter period</strong><span class="setting-help"><button type="button" class="setting-help-button" aria-labelledby="today-period-label" aria-describedby="today-period-help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 1.5-2.5 3M12 16.5h.01"/></svg></button><span class="setting-help-text" id="today-period-help" role="tooltip" data-i18n="settings.today_period_description"></span></span></div><select id="today-period-select" aria-label="Counter period" data-i18n-aria="settings.today_period"><option value="calendar_day" data-i18n="settings.today_period_calendar">Calendar day</option><option value="rolling_24h" data-i18n="settings.today_period_rolling">Last 24 hours</option></select></div>
+        <div class="setting-row setting-child" id="timezone-row"><div><strong data-i18n="settings.timezone">Time zone</strong></div><select id="timezone-select" aria-label="Time zone" data-i18n-aria="settings.timezone"><option value="system" data-i18n="settings.timezone_system">System time zone</option></select></div>
+        <div class="setting-row" id="update-row" hidden><div><strong data-i18n="update.title">App updates</strong><p id="update-status"></p><p id="update-managed" hidden></p><p id="update-install-help" hidden></p><p id="update-last-checked" hidden></p><a href="https://github.com/Amirmpm/typeCount/releases" id="update-details" data-i18n="update.details" hidden>View release notes</a></div><button type="button" class="button" id="check-updates" data-i18n="update.check">Check for updates</button></div>
+        <div class="setting-row" id="autostart-row"><div><strong data-i18n="settings.autostart">Launch at login</strong></div><input type="checkbox" role="switch" class="preference-switch" id="autostart" aria-label="Launch at login" data-i18n-aria="settings.autostart"></div>
+        <div class="setting-row"><div><strong data-i18n="stealth.startup_mode">Windows startup mode</strong></div><select id="tc-startup-mode-select"><option value="tray" data-i18n="stealth.startup_tray">System tray icon (default)</option><option value="stealth" data-i18n="stealth.startup_stealth">Silent stealth (no tray icon)</option></select></div>
+        <div class="setting-row" id="close-action-row"><div><strong data-i18n="settings.close_action">Close behavior</strong><p data-i18n="settings.close_description"></p></div><select id="close-action-select" aria-label="Close behavior" data-i18n-aria="settings.close_action"><option value="ask" data-i18n="settings.close_ask">Ask every time</option><option value="hide" data-i18n="close.hide">Minimize to tray</option><option value="stealth" data-i18n="stealth.close_stealth">Hide in Stealth mode (no tray)</option><option value="quit" data-i18n="close.quit">Save and quit</option></select></div>
+        <div class="setting-row"><div><strong data-i18n="settings.feedback">Feedback</strong></div><button type="button" class="button" id="send-feedback" data-i18n="action.send_feedback">Send feedback</button></div>
+        <div class="setting-row" id="uninstall-row" hidden><div><strong data-i18n="removal.title">Uninstall</strong></div><button class="button" id="uninstall" data-i18n="removal.open">Uninstall…</button></div>
+      </article>
+    </section>
+  </div>
+  </main>
+</div>
+
+<!-- MINI WIDGET -->
+<section id="mini-widget" class="mini-widget" hidden aria-label="TypeCount mini mode" data-i18n-aria="mini.label">
+  <canvas id="sport-canvas" class="mini-sport-canvas" aria-hidden="true" hidden></canvas><div id="mini-sport-layer" class="mini-sport-layer" aria-hidden="true" hidden></div>
+  <div class="mini-top">
+    <div class="mini-brand" id="mini-drag" title="Drag to move" data-i18n-title="mini.drag"><img src="typecount-mark.png" alt=""><strong>TypeCount</strong><span class="mini-grip" aria-hidden="true">⠿</span></div>
+    <div class="mini-actions">
+      <button id="mini-sport" class="mini-icon" aria-pressed="false" aria-label="Enable Sport mode" data-i18n-aria="sport.enable" title="Enable Sport mode" data-i18n-title="sport.enable"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 2 5 11h5l-1 7 6-10h-5Z"/></svg></button>
+      <button id="mini-pin" class="mini-icon" aria-label="Unpin window" data-i18n-aria="mini.unpin" aria-pressed="true" title="Unpin window" data-i18n-title="mini.unpin"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 3 6 0-1 5 3 3H5l3-3-1-5Zm3 8v6"/></svg></button>
+      <button id="mini-hide" class="mini-icon" aria-label="Hide to system tray" data-i18n-aria="mini.hide" title="Hide to system tray" data-i18n-title="mini.hide_title"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
+      <button id="mini-expand" class="mini-icon" aria-label="Open full statistics" data-i18n-aria="mini.expand" title="Expand" data-i18n-title="mini.expand_title"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-6 6M9 16H4v-5M4 16l6-6"/></svg></button>
+    </div>
+  </div>
+  <div class="mini-summary"><div><span class="mini-eyebrow"><span id="mini-period-label" data-i18n="mini.today">Today</span></span><strong id="mini-today">—</strong></div><span class="mini-status" id="mini-status"><span data-i18n="common.connecting">Connecting</span></span><div class="mini-sport-readout" id="mini-sport-readout" hidden><strong id="mini-sport-grade">C</strong><span><b id="mini-sport-cps">0.0</b> CPS</span></div></div>
+  <div class="mini-devices">
+    <div><span class="mini-device-label"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="5" width="16" height="10" rx="2"/><path d="M5 8h1m3 0h1m3 0h1M5 11h1m3 0h1m3 0h1M7 13h6"/></svg><span lang="en">Key</span></span><strong id="mini-keyboard">—</strong></div>
+    <div><span class="mini-device-label"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5" y="2" width="10" height="16" rx="5"/><path d="M10 2v6"/></svg><span lang="en">Mouse</span></span><strong id="mini-mouse">—</strong></div>
+  </div>
+  <div class="mini-bottom"><button id="mini-pause" aria-label="Pause recording" data-i18n-aria="action.pause"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="mini-pause-glyph" d="M6 4v8m4-8v8"/></svg><span id="mini-pause-label"><span data-i18n="mini.pause">Pause</span></span></button></div>
+</section>
+
+<!-- CLOSE DIALOG -->
+<div id="close-overlay" class="close-overlay" hidden>
+<section class="close-dialog" role="dialog" aria-modal="true" aria-labelledby="close-title" aria-describedby="close-description">
+  <div class="close-dialog-heading"><h2 id="close-title" data-i18n="close.title">Close TypeCount</h2><button id="close-cancel" class="window-control" aria-label="Cancel" data-i18n-aria="close.cancel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button></div>
+  <p id="close-description" data-i18n="close.description">Keep recording in the tray, hide in stealth mode, or save your data and quit.</p>
+  <label class="close-remember"><input type="checkbox" id="close-remember"><span data-i18n="close.remember">Remember my choice</span></label>
+  <div class="close-dialog-actions">
+    <button class="button" id="close-hide" data-i18n="close.hide">Minimize to tray</button>
+    <button class="button" id="close-stealth" data-i18n="stealth.close_stealth">Stealth (no tray)</button>
+    <button class="button primary" id="close-quit" data-i18n="close.quit">Save and quit</button>
+  </div>
+</section>
+</div>
+<div role="status" id="toast" hidden></div>
+
+<script src="bridge.js"></script>
+<script src="locales.js"></script>
+<script src="i18n.js"></script>
+<script src="themes.js"></script>
+<script src="dropdown.js"></script>
+<script src="date-picker.js"></script>
+<script src="history.js"></script>
+<script src="history-scatter.js"></script>
+<script src="keyboard.js"></script>
+<script src="shortcuts-catalog.js"></script>
+<script src="report-recipes.js"></script>
+<script src="report-facts.js"></script>
+<script src="insights.js"></script>
+<script src="sport.js"></script>
+<script src="presentation.js"></script>
+<script src="app.js"></script>
+<script src="typecount-ext.js"></script>
+</body>
+</html>
