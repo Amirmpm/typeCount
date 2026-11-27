@@ -1,0 +1,126 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="TypeCount"
+           Language="1033"
+           Version="$(var.AppVersion)"
+           Manufacturer="TypeCount"
+           UpgradeCode="A9C4E12B-47B3-4F91-8A4C-2B1F9D8C7110"
+           Scope="perUser">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+                  Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="TypeCountIcon.ico" SourceFile="..\assets\typecount.ico" />
+    <Property Id="ARPPRODUCTICON" Value="TypeCountIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/Amirmpm/typeCount" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/Amirmpm/typeCount/issues" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch TypeCount when setup exits" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <util:CloseApplication Id="CloseRunningTypeCount"
+                           Target="TypeCount.exe"
+                           CloseMessage="yes"
+                           TerminateProcess="1"
+                           Timeout="3"
+                           RebootPrompt="no" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="TypeCount" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="TypeCount" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Property Id="INSTALLFOLDER">
+      <RegistrySearch Id="FindInstallFolder"
+                      Root="HKCU"
+                      Key="Software\TypeCount"
+                      Name="InstallFolder"
+                      Type="raw" />
+    </Property>
+
+    <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="TypeCountExe" Source="..\releases\TypeCount.exe" />
+      <RemoveFolder Id="CleanInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\TypeCount"
+                     Name="InstallFolder"
+                     Type="string"
+                     Value="[INSTALLFOLDER]"
+                     KeyPath="yes" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                     Name="TypeCount"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]TypeCount.exe&quot; --background" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="*">
+      <Shortcut Id="ApplicationStartMenuShortcut"
+                Name="TypeCount"
+                Description="Offline keyboard and mouse statistics"
+                Target="[#TypeCountExe]"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="TypeCountIcon.ico" />
+      <Shortcut Id="UninstallProductShortcut"
+                Name="Uninstall TypeCount"
+                Description="Uninstall TypeCount"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode]" />
+      <RemoveFolder Id="CleanStartMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\TypeCount"
+                     Name="StartMenuShortcut"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="*">
+      <Shortcut Id="ApplicationDesktopShortcut"
+                Name="TypeCount"
+                Description="Offline keyboard and mouse statistics"
+                Target="[#TypeCountExe]"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="TypeCountIcon.ico" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\TypeCount"
+                     Name="DesktopShortcut"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <Feature Id="MainFeature" Title="TypeCount Application" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <CustomAction Id="LaunchApplication"
+                  FileRef="TypeCountExe"
+                  ExeCommand=""
+                  Return="asyncNoWait" />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+  </Package>
+</Wix>

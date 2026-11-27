@@ -1,0 +1,35 @@
+#include <windows.h>
+#include "../src/core/version.hpp"
+
+1 ICON "typecount.ico"
+1 24 "Setup.manifest"
+101 RCDATA "../releases/TypeCount.exe"
+
+1 VERSIONINFO
+FILEVERSION TC_VERSION_MAJOR,TC_VERSION_MINOR,TC_VERSION_PATCH,TC_VERSION_BUILD
+PRODUCTVERSION TC_VERSION_MAJOR,TC_VERSION_MINOR,TC_VERSION_PATCH,TC_VERSION_BUILD
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "TypeCount"
+      VALUE "FileDescription", "TypeCount Setup Wizard"
+      VALUE "FileVersion", TC_VERSION_STR_4
+      VALUE "InternalName", "TypeCount-Setup"
+      VALUE "LegalCopyright", "GPL-3.0-or-later"
+      VALUE "OriginalFilename", "TypeCount-Setup-x64.exe"
+      VALUE "ProductName", "TypeCount Setup"
+      VALUE "ProductVersion", TC_VERSION_STR_4
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

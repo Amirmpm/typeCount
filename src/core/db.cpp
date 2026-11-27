@@ -200,7 +200,8 @@ bool Db::init_schema(std::string* err_out) {
             keyboard INTEGER NOT NULL DEFAULT 0,
             mouse INTEGER NOT NULL DEFAULT 0,
             scroll INTEGER NOT NULL DEFAULT 0,
-            distance_px INTEGER NOT NULL DEFAULT 0
+            distance_px INTEGER NOT NULL DEFAULT 0,
+            active_sec INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS key_daily (
             day TEXT NOT NULL,
@@ -245,13 +246,41 @@ bool Db::init_schema(std::string* err_out) {
             mouse INTEGER NOT NULL DEFAULT 0,
             label TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS typing_tests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            duration_sec INTEGER NOT NULL,
+            wpm REAL NOT NULL DEFAULT 0,
+            raw_cpm REAL NOT NULL DEFAULT 0,
+            accuracy REAL NOT NULL DEFAULT 100,
+            errors INTEGER NOT NULL DEFAULT 0,
+            chars INTEGER NOT NULL DEFAULT 0,
+            language TEXT NOT NULL DEFAULT 'en'
+        );
         CREATE TABLE IF NOT EXISTS meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-        INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '1');
+        INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2');
     )SQL";
-    return exec(ddl, err_out);
+    if (!exec(ddl, err_out)) return false;
+    // Upgrade existing v1 databases safely
+    bool has_active_col = false;
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db_, "PRAGMA table_info(minute_stats);", -1, &st, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(st) == SQLITE_ROW) {
+            const char* name = reinterpret_cast<const char*>(sqlite3_column_text(st, 1));
+            if (name && std::string(name) == "active_sec") {
+                has_active_col = true;
+                break;
+            }
+        }
+        sqlite3_finalize(st);
+    }
+    if (!has_active_col) {
+        exec("ALTER TABLE minute_stats ADD COLUMN active_sec INTEGER NOT NULL DEFAULT 0;");
+    }
+    return true;
 }
 
 bool Db::apply_batch(const BatchDelta& d) {
@@ -262,20 +291,22 @@ bool Db::apply_batch(const BatchDelta& d) {
     if (!exec("BEGIN IMMEDIATE;")) return false;
     bool ok = true;
 
-    if (d.keyboard > 0 || d.mouse > 0 || d.scroll > 0 || d.distance_px > 0) {
+    if (d.keyboard > 0 || d.mouse > 0 || d.scroll > 0 || d.distance_px > 0 || d.active_sec > 0) {
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_,
-            "INSERT INTO minute_stats(minute_ts, keyboard, mouse, scroll, distance_px) VALUES(?,?,?,?,?) "
+            "INSERT INTO minute_stats(minute_ts, keyboard, mouse, scroll, distance_px, active_sec) VALUES(?,?,?,?,?,?) "
             "ON CONFLICT(minute_ts) DO UPDATE SET "
             "keyboard = keyboard + excluded.keyboard, "
             "mouse = mouse + excluded.mouse, "
             "scroll = scroll + excluded.scroll, "
-            "distance_px = distance_px + excluded.distance_px;", -1, &st, nullptr) == SQLITE_OK) {
+            "distance_px = distance_px + excluded.distance_px, "
+            "active_sec = MIN(60, active_sec + excluded.active_sec);", -1, &st, nullptr) == SQLITE_OK) {
             sqlite3_bind_int64(st, 1, d.minute_ts);
             sqlite3_bind_int64(st, 2, d.keyboard);
             sqlite3_bind_int64(st, 3, d.mouse);
             sqlite3_bind_int64(st, 4, d.scroll);
             sqlite3_bind_int64(st, 5, d.distance_px);
+            sqlite3_bind_int64(st, 6, d.active_sec);
             if (sqlite3_step(st) != SQLITE_DONE) ok = false;
             sqlite3_finalize(st);
         } else ok = false;
@@ -401,6 +432,60 @@ bool Db::record_focus_session(int64_t started_ts, int duration_sec, int64_t keyb
     return ok;
 }
 
+bool Db::record_typing_test(int64_t ts, int duration_sec, double wpm, double raw_cpm, double accuracy, int errors, int chars, const std::string& lang) {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (!db_) return false;
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db_,
+        "INSERT INTO typing_tests(ts, duration_sec, wpm, raw_cpm, accuracy, errors, chars, language) VALUES(?,?,?,?,?,?,?,?);",
+        -1, &st, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    sqlite3_bind_int64(st, 1, ts);
+    sqlite3_bind_int(st, 2, duration_sec);
+    sqlite3_bind_double(st, 3, wpm);
+    sqlite3_bind_double(st, 4, raw_cpm);
+    sqlite3_bind_double(st, 5, accuracy);
+    sqlite3_bind_int(st, 6, errors);
+    sqlite3_bind_int(st, 7, chars);
+    sqlite3_bind_text(st, 8, lang.c_str(), -1, SQLITE_TRANSIENT);
+    bool ok = (sqlite3_step(st) == SQLITE_DONE);
+    sqlite3_finalize(st);
+    return ok;
+}
+
+std::string Db::get_meta(const std::string& key, const std::string& def) {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (!db_) return def;
+    sqlite3_stmt* st = nullptr;
+    std::string val = def;
+    if (sqlite3_prepare_v2(db_, "SELECT value FROM meta WHERE key=?;", -1, &st, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(st, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(st) == SQLITE_ROW) {
+            const char* s = reinterpret_cast<const char*>(sqlite3_column_text(st, 0));
+            if (s) val = s;
+        }
+        sqlite3_finalize(st);
+    }
+    return val;
+}
+
+bool Db::set_meta(const std::string& key, const std::string& val) {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (!db_) return false;
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db_,
+        "INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value;",
+        -1, &st, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    sqlite3_bind_text(st, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(st, 2, val.c_str(), -1, SQLITE_TRANSIENT);
+    bool ok = (sqlite3_step(st) == SQLITE_DONE);
+    sqlite3_finalize(st);
+    return ok;
+}
+
 JsonValue Db::build_snapshot(const SnapshotQuery& q) {
     if (q.demo) return build_demo_snapshot(q);
 
@@ -412,12 +497,13 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
     int64_t today_start_min = today_start_sec / 60;
     int64_t week_start_min = (parse_day_epoch_utc(shift_day(today, -6)) - q.tz_offset_sec) / 60;
 
-    auto sum_window = [&](int64_t min_start, int64_t min_end, int64_t& kb, int64_t& ms, int64_t& sc, int64_t& dist) {
+    auto sum_window = [&](int64_t min_start, int64_t min_end, int64_t& kb, int64_t& ms, int64_t& sc, int64_t& dist, int64_t* act = nullptr) {
         kb = ms = sc = dist = 0;
+        if (act) *act = 0;
         if (!db_) return;
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_,
-            "SELECT COALESCE(SUM(keyboard),0), COALESCE(SUM(mouse),0), COALESCE(SUM(scroll),0), COALESCE(SUM(distance_px),0) "
+            "SELECT COALESCE(SUM(keyboard),0), COALESCE(SUM(mouse),0), COALESCE(SUM(scroll),0), COALESCE(SUM(distance_px),0), COALESCE(SUM(active_sec),0) "
             "FROM minute_stats WHERE minute_ts >= ? AND minute_ts <= ?;", -1, &st, nullptr) == SQLITE_OK) {
             sqlite3_bind_int64(st, 1, min_start);
             sqlite3_bind_int64(st, 2, min_end);
@@ -426,28 +512,30 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
                 ms = sqlite3_column_int64(st, 1);
                 sc = sqlite3_column_int64(st, 2);
                 dist = sqlite3_column_int64(st, 3);
+                if (act) *act = sqlite3_column_int64(st, 4);
             }
             sqlite3_finalize(st);
         }
     };
 
-    int64_t t_kb = 0, t_ms = 0, t_sc = 0, t_dist = 0;
-    sum_window(today_start_min, now_min + 1, t_kb, t_ms, t_sc, t_dist);
+    int64_t t_kb = 0, t_ms = 0, t_sc = 0, t_dist = 0, t_act = 0;
+    sum_window(today_start_min, now_min + 1, t_kb, t_ms, t_sc, t_dist, &t_act);
 
     int64_t w_kb = 0, w_ms = 0, w_sc = 0, w_dist = 0;
     sum_window(week_start_min, now_min + 1, w_kb, w_ms, w_sc, w_dist);
 
-    int64_t l_kb = 0, l_ms = 0, l_sc = 0, l_dist = 0;
+    int64_t l_kb = 0, l_ms = 0, l_sc = 0, l_dist = 0, l_act = 0;
     if (db_) {
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_,
-            "SELECT COALESCE(SUM(keyboard),0), COALESCE(SUM(mouse),0), COALESCE(SUM(scroll),0), COALESCE(SUM(distance_px),0) FROM minute_stats;",
+            "SELECT COALESCE(SUM(keyboard),0), COALESCE(SUM(mouse),0), COALESCE(SUM(scroll),0), COALESCE(SUM(distance_px),0), COALESCE(SUM(active_sec),0) FROM minute_stats;",
             -1, &st, nullptr) == SQLITE_OK) {
             if (sqlite3_step(st) == SQLITE_ROW) {
                 l_kb = sqlite3_column_int64(st, 0);
                 l_ms = sqlite3_column_int64(st, 1);
                 l_sc = sqlite3_column_int64(st, 2);
                 l_dist = sqlite3_column_int64(st, 3);
+                l_act = sqlite3_column_int64(st, 4);
             }
             sqlite3_finalize(st);
         }
@@ -556,13 +644,13 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
     }
 
     // All daily aggregates
-    struct DayAgg { int64_t k = 0, m = 0, sc = 0, dist = 0; };
+    struct DayAgg { int64_t k = 0, m = 0, sc = 0, dist = 0, act = 0; };
     std::map<std::string, DayAgg> all_days;
     if (db_) {
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_,
             "SELECT strftime('%Y-%m-%d', minute_ts*60 + ?, 'unixepoch') AS d, "
-            "SUM(keyboard), SUM(mouse), SUM(scroll), SUM(distance_px) "
+            "SUM(keyboard), SUM(mouse), SUM(scroll), SUM(distance_px), SUM(active_sec) "
             "FROM minute_stats GROUP BY d ORDER BY d ASC;", -1, &st, nullptr) == SQLITE_OK) {
             sqlite3_bind_int(st, 1, q.tz_offset_sec);
             while (sqlite3_step(st) == SQLITE_ROW) {
@@ -572,7 +660,8 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
                         sqlite3_column_int64(st, 1),
                         sqlite3_column_int64(st, 2),
                         sqlite3_column_int64(st, 3),
-                        sqlite3_column_int64(st, 4)
+                        sqlite3_column_int64(st, 4),
+                        sqlite3_column_int64(st, 5)
                     };
                 }
             }
@@ -587,6 +676,7 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
         row.set("counts", make_counts(kv.second.k, kv.second.m));
         row.set("scroll", kv.second.sc);
         row.set("distance_px", kv.second.dist);
+        row.set("active_sec", kv.second.act);
         history_days.push(std::move(row));
     }
 
@@ -744,6 +834,59 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
         }
     }
 
+    // Recent Typing Test attempts & Personal Best
+    JsonValue typing_tests_arr = JsonValue::array();
+    double typing_test_best_wpm = 0.0;
+    if (db_) {
+        sqlite3_stmt* st = nullptr;
+        if (sqlite3_prepare_v2(db_,
+            "SELECT ts, duration_sec, wpm, raw_cpm, accuracy, errors, chars, language "
+            "FROM typing_tests ORDER BY id DESC LIMIT 15;", -1, &st, nullptr) == SQLITE_OK) {
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                JsonValue row = JsonValue::object();
+                row.set("ts", sqlite3_column_int64(st, 0));
+                row.set("duration_sec", sqlite3_column_int(st, 1));
+                row.set("wpm", std::round(sqlite3_column_double(st, 2) * 10.0) / 10.0);
+                row.set("raw_cpm", std::round(sqlite3_column_double(st, 3) * 10.0) / 10.0);
+                row.set("accuracy", std::round(sqlite3_column_double(st, 4) * 10.0) / 10.0);
+                row.set("errors", sqlite3_column_int(st, 5));
+                row.set("chars", sqlite3_column_int(st, 6));
+                const char* lg = reinterpret_cast<const char*>(sqlite3_column_text(st, 7));
+                row.set("language", lg ? lg : "en");
+                typing_tests_arr.push(std::move(row));
+            }
+            sqlite3_finalize(st);
+        }
+        if (sqlite3_prepare_v2(db_, "SELECT COALESCE(MAX(wpm),0) FROM typing_tests;", -1, &st, nullptr) == SQLITE_OK) {
+            if (sqlite3_step(st) == SQLITE_ROW) typing_test_best_wpm = sqlite3_column_double(st, 0);
+            sqlite3_finalize(st);
+        }
+    }
+
+    // Peak Productivity Hour & Focus Score
+    int peak_hour = -1;
+    int64_t peak_hour_count = 0;
+    int active_hours_today = 0;
+    for (int h = 0; h < 24; ++h) {
+        int64_t sum_h = today_hours[h].first + today_hours[h].second;
+        if (sum_h > 0) active_hours_today++;
+        if (sum_h > peak_hour_count) {
+            peak_hour_count = sum_h;
+            peak_hour = h;
+        }
+    }
+    int focus_score = 0;
+    int64_t today_ops = t_kb + t_ms;
+    if (today_ops > 0) {
+        double goal_part = q.prefs.daily_goal > 0
+            ? std::min(40.0, 40.0 * static_cast<double>(today_ops) / static_cast<double>(q.prefs.daily_goal))
+            : 25.0;
+        double active_part = std::min(35.0, (static_cast<double>(t_act) / 3600.0) * 12.0);
+        double cadence_part = std::min(15.0, active_hours_today * 2.5);
+        double ergo_bonus = (q.live.ergo_strain_level == 0) ? 10.0 : (q.live.ergo_strain_level == 1 ? 5.0 : 0.0);
+        focus_score = std::max(5, std::min(100, static_cast<int>(std::round(goal_part + active_part + cadence_part + ergo_bonus))));
+    }
+
     // Optional Report detail
     JsonValue report_obj(nullptr);
     if (!q.report_period.empty() && !q.report_day.empty() && db_) {
@@ -859,6 +1002,15 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
     snap.set("break_elapsed_sec", q.live.break_elapsed_sec);
     snap.set("break_interval_sec", static_cast<int64_t>(q.prefs.break_interval_min) * 60);
     snap.set("break_due", q.live.break_due);
+    snap.set("today_active_sec", t_act);
+    snap.set("lifetime_active_sec", l_act);
+    snap.set("peak_hour", peak_hour);
+    snap.set("peak_hour_count", peak_hour_count);
+    snap.set("focus_score", focus_score);
+    snap.set("ergo_strain_level", q.live.ergo_strain_level);
+    snap.set("ergo_10m_ops", q.live.ergo_10m_ops);
+    snap.set("typing_test_best_wpm", std::round(typing_test_best_wpm * 10.0) / 10.0);
+    snap.set("typing_tests", std::move(typing_tests_arr));
     snap.set("apps_today", std::move(apps_today));
     snap.set("apps_lifetime", std::move(apps_lifetime));
     snap.set("focus_sessions", std::move(focus_arr));
@@ -1084,6 +1236,15 @@ JsonValue Db::build_demo_snapshot(const SnapshotQuery& q) const {
     snap.set("break_elapsed_sec", 1420);
     snap.set("break_interval_sec", static_cast<int64_t>(q.prefs.break_interval_min) * 60);
     snap.set("break_due", false);
+    snap.set("today_active_sec", 14280);
+    snap.set("lifetime_active_sec", 984200);
+    snap.set("peak_hour", 14);
+    snap.set("peak_hour_count", 2890);
+    snap.set("focus_score", 88);
+    snap.set("ergo_strain_level", 0);
+    snap.set("ergo_10m_ops", 640);
+    snap.set("typing_test_best_wpm", 84.5);
+    snap.set("typing_tests", JsonValue::array());
     snap.set("apps_today", apps);
     snap.set("apps_lifetime", std::move(apps));
     snap.set("focus_sessions", JsonValue::array());
@@ -1103,12 +1264,12 @@ bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string*
     }
     // UTF-8 BOM for seamless Excel display
     f << "\xEF\xBB\xBF";
-    f << "date,keyboard,mouse,total,scroll_events,distance_meters,peak_wpm,avg_wpm\n";
+    f << "date,keyboard,mouse,total,scroll_events,distance_meters,active_seconds,peak_wpm,avg_wpm\n";
 
     sqlite3_stmt* st = nullptr;
     if (sqlite3_prepare_v2(db_,
         "SELECT strftime('%Y-%m-%d', m.minute_ts*60 + ?, 'unixepoch') AS d, "
-        "SUM(m.keyboard), SUM(m.mouse), SUM(m.scroll), SUM(m.distance_px), "
+        "SUM(m.keyboard), SUM(m.mouse), SUM(m.scroll), SUM(m.distance_px), SUM(m.active_sec), "
         "COALESCE(w.peak_wpm, 0), CASE WHEN COALESCE(w.samples,0)>0 THEN w.sum_wpm/w.samples ELSE 0 END "
         "FROM minute_stats m LEFT JOIN wpm_daily w ON w.day = strftime('%Y-%m-%d', m.minute_ts*60 + ?, 'unixepoch') "
         "GROUP BY d ORDER BY d DESC;", -1, &st, nullptr) != SQLITE_OK) {
@@ -1124,11 +1285,12 @@ bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string*
         int64_t ms = sqlite3_column_int64(st, 2);
         int64_t sc = sqlite3_column_int64(st, 3);
         int64_t dist = sqlite3_column_int64(st, 4);
-        double pw = sqlite3_column_double(st, 5);
-        double aw = sqlite3_column_double(st, 6);
+        int64_t act = sqlite3_column_int64(st, 5);
+        double pw = sqlite3_column_double(st, 6);
+        double aw = sqlite3_column_double(st, 7);
         f << csv_escape(d ? d : "") << "," << kb << "," << ms << "," << (kb + ms) << ","
           << sc << "," << std::fixed << std::setprecision(2) << (dist * px_to_m) << ","
-          << std::setprecision(1) << pw << "," << aw << "\n";
+          << act << "," << std::setprecision(1) << pw << "," << aw << "\n";
     }
     sqlite3_finalize(st);
     return f.good();
@@ -1238,6 +1400,20 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
         return found;
     };
 
+    auto has_column = [&](const char* tbl, const char* col) {
+        sqlite3_stmt* st = nullptr;
+        bool found = false;
+        std::string sql = std::string("PRAGMA table_info(") + tbl + ");";
+        if (sqlite3_prepare_v2(src, sql.c_str(), -1, &st, nullptr) == SQLITE_OK) {
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                const char* cname = reinterpret_cast<const char*>(sqlite3_column_text(st, 1));
+                if (cname && std::string(cname) == col) { found = true; break; }
+            }
+            sqlite3_finalize(st);
+        }
+        return found;
+    };
+
     if (!exec("BEGIN IMMEDIATE;")) {
         sqlite3_close(src);
         rep.error = "Cannot start transaction";
@@ -1250,14 +1426,15 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
         sqlite3_stmt* chk = nullptr;
         sqlite3_stmt* ins = nullptr;
         if (sqlite3_prepare_v2(src, query, -1, &sst, nullptr) != SQLITE_OK) return false;
-        sqlite3_prepare_v2(db_, "SELECT keyboard, mouse, scroll, distance_px FROM minute_stats WHERE minute_ts=?;", -1, &chk, nullptr);
+        sqlite3_prepare_v2(db_, "SELECT keyboard, mouse, scroll, distance_px, active_sec FROM minute_stats WHERE minute_ts=?;", -1, &chk, nullptr);
         sqlite3_prepare_v2(db_,
-            "INSERT INTO minute_stats(minute_ts, keyboard, mouse, scroll, distance_px) VALUES(?,?,?,?,?) "
+            "INSERT INTO minute_stats(minute_ts, keyboard, mouse, scroll, distance_px, active_sec) VALUES(?,?,?,?,?,?) "
             "ON CONFLICT(minute_ts) DO UPDATE SET "
             "keyboard = MAX(keyboard, excluded.keyboard), "
             "mouse = MAX(mouse, excluded.mouse), "
             "scroll = MAX(scroll, excluded.scroll), "
-            "distance_px = MAX(distance_px, excluded.distance_px);", -1, &ins, nullptr);
+            "distance_px = MAX(distance_px, excluded.distance_px), "
+            "active_sec = MAX(active_sec, excluded.active_sec);", -1, &ins, nullptr);
 
         while (sqlite3_step(sst) == SQLITE_ROW) {
             int64_t m = sqlite3_column_int64(sst, 0);
@@ -1265,6 +1442,7 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
             int64_t ms = sqlite3_column_int64(sst, 2);
             int64_t sc = sqlite3_column_int64(sst, 3);
             int64_t dist = sqlite3_column_int64(sst, 4);
+            int64_t act = sqlite3_column_int64(sst, 5);
 
             int64_t cur_k = 0, cur_m = 0;
             sqlite3_reset(chk);
@@ -1284,6 +1462,7 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
             sqlite3_bind_int64(ins, 3, nm);
             sqlite3_bind_int64(ins, 4, sc);
             sqlite3_bind_int64(ins, 5, dist);
+            sqlite3_bind_int64(ins, 6, act);
             if (sqlite3_step(ins) != SQLITE_DONE) { ok = false; break; }
         }
         sqlite3_finalize(sst);
@@ -1293,10 +1472,12 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
     };
 
     if (has_table("minute_stats")) {
-        ok = merge_minutes("SELECT minute_ts, keyboard, mouse, scroll, distance_px FROM minute_stats;");
+        ok = merge_minutes(has_column("minute_stats", "active_sec")
+            ? "SELECT minute_ts, keyboard, mouse, scroll, distance_px, active_sec FROM minute_stats;"
+            : "SELECT minute_ts, keyboard, mouse, scroll, distance_px, 0 FROM minute_stats;");
     } else if (has_table("minute_counts")) {
         // Support importing ClickPulse minute_counts tables if schema matches
-        ok = merge_minutes("SELECT minute, keyboard, mouse, 0, 0 FROM minute_counts;");
+        ok = merge_minutes("SELECT minute, keyboard, mouse, 0, 0, 0 FROM minute_counts;");
     } else {
         ok = false;
         rep.error = "Selected file is not a compatible TypeCount/ClickPulse database.";

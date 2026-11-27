@@ -62,10 +62,17 @@
     Object.assign(view,next);
     if(view.ui_scale==='auto')view.ui_scale='100';
     document.documentElement.dataset.fontSize=view.compact?'100':view.ui_scale;
+    const verEl=$('app-version');
+    if(verEl&&(next.app_version||window.typeCountVersion))verEl.textContent=next.app_version||window.typeCountVersion;
     if(next.timezones)window.setTimeZoneChoices(next.timezones);
     if(next.timezone)window.setInterfaceTimeZone(next.timezone);
+    if(typeof next.jalali_calendar==='boolean')window.setInterfaceJalali?.(next.jalali_calendar);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
+    const ttNav=$('typingtest-nav');
+    if(ttNav)ttNav.hidden=view.typing_test_enabled===false;
+    const ergoCard=$('tc-ergo-card');
+    if(ergoCard)ergoCard.hidden=view.ergo_insights_enabled===false;
     window.syncPresentationLabels();
     window.updateInsightsVisibility?.();
     document.body.dataset.windowFullscreen=String(!!view.fullscreen&&!view.compact);

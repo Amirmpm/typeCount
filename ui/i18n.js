@@ -14,13 +14,23 @@ function createClickPulseI18n(messages, initialLocale='en', platform='windows') 
     return 'en';
   }
   let locale=resolveLocale(initialLocale),timezone='system',zoneId=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let jalaliEnabled=false;
+  const jalaliFormatter=(typeof TypeCountJalali!=='undefined'?TypeCountJalali:null);
   let numbers=new Intl.NumberFormat(locale);
   const percents=new Map(),dates=new Map(),decimals=new Map();
   const api={
     get locale(){return locale;},
     get isRtl(){return locale==='fa';},
+    get jalali(){return jalaliEnabled;},
     get timezone(){return timezone;},
     get effectiveTimeZone(){return zoneId;},
+    setJalali(value){
+      const next=!!value;
+      const changed=jalaliEnabled!==next;
+      jalaliEnabled=next;
+      if(changed)dates.clear();
+      return changed;
+    },
     setTimeZone(value='system'){
       if(value===timezone&&value!=='system')return false;
       const next=value==='system'?Intl.DateTimeFormat().resolvedOptions().timeZone:value;
@@ -46,6 +56,9 @@ function createClickPulseI18n(messages, initialLocale='en', platform='windows') 
     },
     date(value,options={}){
       if(!options.timeZone)options={...options,timeZone:zoneId};
+      if(jalaliEnabled&&jalaliFormatter&&(options.year||options.month||options.day)){
+        return jalaliFormatter.formatJalaliDate(new Date(value),options,locale,numbers);
+      }
       const key=JSON.stringify(Object.entries(options).sort(([a],[b])=>a.localeCompare(b)));
       if(!dates.has(key))dates.set(key,new Intl.DateTimeFormat(locale,options));
       return dates.get(key).format(new Date(value));
@@ -54,14 +67,22 @@ function createClickPulseI18n(messages, initialLocale='en', platform='windows') 
       const day=value.length===7?value+'-01':value;
       return api.date(day+'T00:00:00Z',{...options,timeZone:'UTC'});
     },
-    month(value){return api.date(Date.UTC(2020,Number(value)-1,1),{month:'short',timeZone:'UTC'});},
+    month(value){
+      if(jalaliEnabled&&jalaliFormatter){
+        // Map month boundary cleanly so calendar heatmap shows approximate Jalali month label
+        const mid=new Date(Date.UTC(2025,Number(value)-1,15));
+        const j=jalaliFormatter.toJalali(mid.getUTCFullYear(),mid.getUTCMonth()+1,mid.getUTCDate());
+        return jalaliFormatter.monthName(j.jm,locale);
+      }
+      return api.date(Date.UTC(2020,Number(value)-1,1),{month:'short',timeZone:'UTC'});
+    },
     weekdays(){return [0,1,2,3,4,5,6].map(offset=>api.date(Date.UTC(2020,0,6+offset),{weekday:'short',timeZone:'UTC'}));},
     apply(root) {
       root.documentElement.lang=locale;
       root.documentElement.dir=locale==='fa'?'rtl':'ltr';
       for(const node of root.querySelectorAll('[data-i18n]'))node.textContent=api.t(node.dataset.i18n,node.dataset);
-      for(const [data,attribute] of [['i18nAria','aria-label'],['i18nTitle','title']]) {
-        const selector=data==='i18nAria'?'[data-i18n-aria]':'[data-i18n-title]';
+      for(const [data,attribute] of [['i18nAria','aria-label'],['i18nTitle','title'],['i18nPlaceholder','placeholder']]) {
+        const selector=data==='i18nAria'?'[data-i18n-aria]':data==='i18nTitle'?'[data-i18n-title]':'[data-i18n-placeholder]';
         for(const node of root.querySelectorAll(selector))node.setAttribute(attribute,api.t(node.dataset[data]));
       }
     }

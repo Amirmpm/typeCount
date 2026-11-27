@@ -57,39 +57,47 @@ function updateHistoryRevision(rows=[]){
 let sidebarCollapsed=false;
 let recordingPaused=null;
 let dataOperationBusy=false;
-let updateState={status:'idle',current:'',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
+let updateState={status:'idle',current:window.typeCountVersion||'1.1.0',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
 const updateBusy=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
 const updateInstalling=()=>['preparing','installing'].includes(updateState.status);
 function renderUpdateState(){
   const button=$('check-updates'),status=$('update-status'),details=$('update-details');
   if(!button||!status||!details)return;
-  const state=updateState,available=['available','ready'].includes(state.status),managed=!!state.update_command;
-  const key={checking:'update.checking',current:'update.current',ready:'update.ready',available:managed||state.can_install?'update.available':'update.manual',error:'update.failed',limited:'update.limited',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[state.status];
+  const state=updateState;
+  const curVer=state.current_version||state.current||window.typeCountVersion||'1.1.0';
+  const normStatus=state.status==='up_to_date'?'current':state.status==='rate_limited'?'limited':state.status;
+  const ver=state.available_version||state.version;
+  const available=['available','ready'].includes(normStatus),managed=!!state.update_command;
+  const key={checking:'update.checking',current:'update.current',ready:'update.ready',available:managed||state.can_install?'update.available':'update.manual',error:'update.failed',limited:'update.limited',verifying:'update.verifying',preparing:'update.preparing',installing:'update.restarting'}[normStatus];
   const percent=state.total>0?Math.min(100,Math.floor(state.received/state.total*100)):0;
-  const text=state.status==='downloading'?t('update.downloading',{percent}):key?t(key,{version:state.version||state.current}):state.current?t('update.version',{version:state.current}):'';
+  const text=normStatus==='downloading'?t('update.downloading',{percent}):key?t(key,{version:ver||curVer}):t('update.version',{version:curVer});
   setSelectableText(status,text);
   const managedHint=$('update-managed');
   if(managedHint){managedHint.hidden=!managed;setSelectableText(managedHint,managed?t('update.managed',{manager:state.update_command.startsWith('winget ')?'WinGet':'Scoop',command:state.update_command}):'');}
   const installHelp=$('update-install-help');
   if(installHelp){installHelp.hidden=!available||managed||state.can_install||state.automatic===false;setSelectableText(installHelp,t('update.install_help'));}
-  // Demo, read-only and independent sessions cannot schedule checks or change
-  // the installed app's preference, so show why this setting is unavailable.
   const scheduled=state.automatic!==false;
   const automatic=$('automatic-updates'),last=$('update-last-checked');
   if(automatic){automatic.checked=scheduled&&window.presentationView?.auto_check_updates!==false;automatic.disabled=!scheduled||updateInstalling();}
   const unavailable=$('update-automatic-unavailable');
   if(unavailable)unavailable.hidden=scheduled;
-  const checked=window.presentationView?.last_update_check;
-  const valid=scheduled&&Number.isFinite(checked)&&Math.abs(checked)<=8640000000000;
+  const checked=state.last_checked_at||window.presentationView?.last_update_check;
+  const valid=scheduled&&Number.isFinite(checked)&&checked>0&&Math.abs(checked)<=8640000000000;
   if(last){last.hidden=!valid;setSelectableText(last,valid?t('update.last_checked',{time:I.date(checked*1000,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}):'');}
-  button.textContent=t(state.status==='checking'?'update.checking':updateBusy()?'update.updating':available&&!managed?(state.status==='ready'&&state.can_install?'update.install':'update.download'):'update.check');
-  button.disabled=dataOperationBusy||state.status==='checking'||updateBusy();
-  button.setAttribute('aria-busy',String(state.status==='checking'||updateBusy()));
-  details.hidden=!available&&!['error','limited'].includes(state.status);
+  button.textContent=t(normStatus==='checking'?'update.checking':updateBusy()?'update.updating':available&&!managed?(normStatus==='ready'&&state.can_install?'update.install':'update.download'):'update.check');
+  button.disabled=dataOperationBusy||normStatus==='checking'||updateBusy();
+  button.setAttribute('aria-busy',String(normStatus==='checking'||updateBusy()));
+  if(state.release_url)details.href=state.release_url;
+  details.hidden=!available&&!['error','limited'].includes(normStatus);
 }
 window.renderUpdatePreferences=renderUpdateState;
 window.receiveUpdateState=state=>{Object.assign(updateState,state);renderDataOperation();};
-window.receiveUpdateAvailable=version=>window.toast(t(updateState.update_command?'update.found_managed':'update.found',{version,command:updateState.update_command}),8000);
+window.receiveUpdateAvailable=payload=>{
+  const ver=typeof payload==='string'?payload:payload?.version;
+  if(payload&&typeof payload==='object')Object.assign(updateState,{status:'available',available_version:payload.version,release_url:payload.release_url,download_url:payload.download_url});
+  renderDataOperation();
+  window.toast(t(updateState.update_command?'update.found_managed':'update.found',{version:ver||'',command:updateState.update_command}),8000);
+};
 // An ad-hoc signed update can leave macOS showing a stale, ineffective grant.
 let updatedThisLaunch=false;
 window.receiveUpdateNotice=notice=>{
@@ -111,7 +119,7 @@ $('automatic-updates')?.addEventListener('change',event=>{
 function renderDataOperation(){
   $('data-operation-status').hidden=!dataOperationBusy;
   $('data-operation-message').textContent=t('storage.processing');
-  for(const id of ['storage-directory','import-history','reveal'])$(id).disabled=dataOperationBusy||updateInstalling()||(id==='reveal'&&!!data?.demo);
+  for(const id of ['storage-directory','reset-storage-directory','import-history','reveal'])if($(id))$(id).disabled=dataOperationBusy||updateInstalling()||(id==='reveal'&&!!data?.demo);
   $('takeover').disabled=dataOperationBusy||!data?.capture?.listening||!!data?.capture?.permission_needed;
   $('uninstall').disabled=dataOperationBusy||updateBusy()||updateState.status==='checking';
   renderUpdateState();
@@ -128,8 +136,8 @@ const scatter=ClickPulseScatter.create({document,window,I,H,send});
 window.receiveHistoryHours=(id,rows)=>scatter.receive(id,rows);
 window.clearHistoryScatter=()=>scatter.clear();
 let calendarBook=H.nextBook(-1,Math.random()),calendarPhrase=H.nextPhrase(-1,Math.random());
-const titles={overview:'page.overview',history:'page.history',keys:'page.heatmap',apps:'page.apps',shortcuts:'page.shortcuts',mouse:'page.heatmap',share:'page.share',settings:'page.settings'};
-const navTitles={...titles,share:'nav.share'};
+const titles={overview:'page.overview',history:'page.history',keys:'page.heatmap',apps:'page.apps',shortcuts:'page.shortcuts',typingtest:'page.typingtest',mouse:'page.heatmap',share:'page.share',settings:'page.settings'};
+const navTitles={...titles,typingtest:'nav.typingtest',share:'nav.share'};
 const insights=typeof ClickPulseInsights==='undefined'?null:ClickPulseInsights.create({document,window,I,send,syncDropdown:Dropdowns.sync,toast:message=>window.toast(message)});
 window.updateInsightsVisibility=()=>insights?.setWindowState(window.presentationView);
 const sportView=typeof ClickPulseSport==='undefined'?null:ClickPulseSport.createView({document,window,translate:t,formatSpeed:value=>I.decimal(value,1),send});
@@ -172,14 +180,24 @@ window.setInterfaceLanguage=(locale,preference)=>{
   $('language-select').value=preference||'system';
   Dropdowns.sync('language-select');
   if(I.locale===locale)return;
-  I.setLocale(locale);I.apply(document);window.syncPresentationLabels?.();updateHeading();renderDataOperation();
+  I.setLocale(locale);I.apply(document);renderSignatures.clear();window.syncPresentationLabels?.();updateHeading();renderDataOperation();
   window.renderTodayPeriod?.();
-  if(data){window.renderTypeCountOverview?.(data);window.renderTypeCountApps?.(data);}
+  if(data){renderSettingsBody();window.renderTypeCountOverview?.(data);window.renderTypeCountApps?.(data);window.renderTypeCountTypingTest?.(data);}
   window.renderTypeCountSettings?.();
   renderTimeZoneOptions();Dropdowns.syncAll();
   calendarLayout='';historySignature='';
   sportView?.render();
   for(const id of ['calendar-range-select','history-range-select'])delete $(id).dataset.options;
+};
+window.setInterfaceJalali=enabled=>{
+  if(!I.setJalali?.(enabled))return;
+  renderSignatures.clear();calendarLayout='';historySignature='';
+  for(const id of ['calendar-range-select','history-range-select'])delete $(id).dataset.options;
+  renderDataOperation();
+  if(data){
+    window.renderTypeCountTypingTest?.(data);
+    insights?.render(page,data);
+  }
 };
 let timezoneNames=[],timezoneChoicesSignature='';
 function renderTimeZoneOptions(){
@@ -322,6 +340,7 @@ function navigatePage(next){
     calendarPhrase=H.nextPhrase(calendarPhrase,Math.random());
   }
   if(page==='history'&&next!=='history')scatter.clear();
+  if(page==='typingtest'&&next!=='typingtest')window.stopTypeCountTypingTest?.();
   page=next==='mouse'?'keys':next;
   document.querySelectorAll('.page').forEach(el=>el.hidden=el.id!==page);
   updateHeading();syncSettingsNavigation();
@@ -337,6 +356,7 @@ document.querySelectorAll('[data-range]').forEach(button=>button.addEventListene
 $('pause').addEventListener('click',()=>send('pause'));
 for(const id of ['permission','settings-permission'])$(id).addEventListener('click',()=>send('permission'));
 $('storage-directory').addEventListener('click',()=>send('storage_directory'));
+$('reset-storage-directory')?.addEventListener('click',()=>send('reset_storage_directory'));
 $('import-history').addEventListener('click',()=>send('import_history'));
 $('reveal').addEventListener('click',()=>send('reveal'));
 $('calendar-range-select').addEventListener('change',event=>{
@@ -484,6 +504,8 @@ window.receive=snapshot=>{
     renderChanged('keyboard',[data.keyboard_stats||data.top_keys,window.presentationView?.keyboard_layout,usesKeyboardTreemap()],renderKeyboard);
   }else if(page==='apps'){
     window.renderTypeCountApps?.(data);
+  }else if(page==='typingtest'){
+    window.renderTypeCountTypingTest?.(data);
   }
   insights?.render(page,data);
   if(restoring)restoreSessionScroll(restoring);
@@ -517,11 +539,15 @@ function renderSettingsBody(){
   setSelectableText($('db-path'),data.demo?t('demo.storage'):data.database_path);
   const storageMode=data.demo?'demo':data.database_mode||'custom';
   const storageDescriptions={custom:'settings.storage_custom',source:'settings.storage_source',demo:'settings.storage_demo'};
-  $('uninstall-row').hidden=window.clickpulsePlatform!=='windows'||data.demo||data.source_mode||storageMode!=='default';
+  const hideDesktopMgmt=window.clickpulsePlatform!=='windows'||data.demo||data.source_mode;
+  $('uninstall-row').hidden=hideDesktopMgmt;
+  if($('update-row'))$('update-row').hidden=!!data.demo||!!data.source_mode;
+  if($('automatic-updates-row'))$('automatic-updates-row').hidden=!!data.demo||!!data.source_mode;
   $('db-description').hidden=storageMode==='default';
   $('db-description').textContent=storageMode==='default'?'':t(storageDescriptions[storageMode]||storageDescriptions.custom);
-  $('storage-directory').hidden=storageMode!=='default';
-  $('import-history-row').hidden=storageMode!=='default';
+  $('storage-directory').hidden=!['default','custom'].includes(storageMode);
+  if($('reset-storage-directory'))$('reset-storage-directory').hidden=storageMode!=='custom';
+  $('import-history-row').hidden=!['default','custom'].includes(storageMode);
   $('reveal').disabled=!!data.demo||dataOperationBusy||updateInstalling();
   syncSettingsNavigation();
 }
@@ -733,7 +759,7 @@ function updateRangeOptions(select,isCalendar){
 function renderCalendar(){
   const today=data.now.split('T')[0],bounds=H.bounds(data.history_days,today,calendarRange);
   const days=H.calendarDays(data.history_days,bounds.start,bounds.end);
-  const layout=I.locale+':'+calendarRange+':'+bounds.start+':'+bounds.end;
+  const layout=I.locale+':'+Boolean(I.jalali)+':'+calendarRange+':'+bounds.start+':'+bounds.end;
   if(calendarLayout!==layout){
     calendarCells=new Map();
     const block=document.createElement('div');block.className='calendar-year';
@@ -761,9 +787,10 @@ function renderCalendar(){
     const className='heat-cell level-'+level+(d.day===today?' today':'');
     if(cell.className!==className)cell.className=className;
     const previous=cell.calendarCounts;
-    if(!previous||previous.keyboard!==d.counts.keyboard||previous.mouse!==d.counts.mouse){
-      cell.title=t('calendar.tooltip',{day:d.day,count:n(value),keyboard:n(d.counts.keyboard),mouse:n(d.counts.mouse)});cell.setAttribute('aria-label',cell.title);
-      cell.calendarCounts={...d.counts};
+    const keyStamp=`${d.counts.keyboard}:${d.counts.mouse}:${I.locale}:${Boolean(I.jalali)}`;
+    if(!previous||previous.stamp!==keyStamp){
+      cell.title=t('calendar.tooltip',{day:I.day(d.day),count:n(value),keyboard:n(d.counts.keyboard),mouse:n(d.counts.mouse)});cell.setAttribute('aria-label',cell.title);
+      cell.calendarCounts={stamp:keyStamp};
     }
   }
   $('active-days').textContent=t('calendar.recorded',{count:n(days.filter(d=>total(d.counts)>0).length)});
@@ -783,7 +810,7 @@ function renderHistory(){
   const today=data.now.split('T')[0],records=H.recordedInRange(data.history_days,today,historyRange),bounds=H.bounds(data.history_days,today,historyRange);
   if(!dataOperationBusy&&window.presentationView?.visible!==false)scatter.update(data,records,bounds,currentTheme);
   const pagination=H.paginate(records,historyPage);historyPage=pagination.page;
-  const signature=I.locale+':'+currentTheme+':'+historyRange+':'+historyPage+':'+today+':'+historyRevision;
+  const signature=I.locale+':'+Boolean(I.jalali)+':'+currentTheme+':'+historyRange+':'+historyPage+':'+today+':'+historyRevision;
   if(signature===historySignature)return;
   historySignature=signature;
   const days=H.calendarDays(records,bounds.start,bounds.end),trend=H.trend(days);

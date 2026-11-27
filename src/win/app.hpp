@@ -5,9 +5,11 @@
 #include "../core/json.hpp"
 #include "../core/key_mapper.hpp"
 #include "../core/preferences.hpp"
+#include "../core/version.hpp"
 #include "platform.hpp"
 #include "webview_host.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <deque>
@@ -15,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace tc {
@@ -23,10 +26,13 @@ namespace win {
 constexpr UINT WM_TRAYICON = WM_APP + 1;
 constexpr UINT WM_APP_ACTIVATE = WM_APP + 2;
 constexpr UINT WM_APP_IPC = WM_APP + 3;
+constexpr UINT WM_APP_REPLACE_FOR_UPGRADE = WM_APP + 4;
+constexpr UINT WM_APP_UPDATE_RESULT = WM_APP + 5;
 
 constexpr UINT_PTR TIMER_FLUSH = 101;
 constexpr UINT_PTR TIMER_SPORT = 102;
 constexpr UINT_PTR TIMER_DISPOSE_UI = 103;
+constexpr UINT_PTR TIMER_AUTO_UPDATE = 104;
 constexpr int HOTKEY_WAKE_ID = 1;
 
 constexpr UINT MENU_OPEN = 1001;
@@ -50,25 +56,65 @@ public:
         bool arg_tray = cmd_line.find(L"--tray") != std::wstring::npos;
         bool arg_demo = cmd_line.find(L"--demo") != std::wstring::npos;
         bool arg_no_autostart = cmd_line.find(L"--no-autostart") != std::wstring::npos;
+        bool arg_replace = cmd_line.find(L"--replace") != std::wstring::npos;
         demo_mode_ = arg_demo;
 
-        // Single-instance check & activation of existing instance (even in no-tray stealth mode)
+        // Single-instance check: automatically replace older running versions (e.g. v1.0.0/v1.0.1)
+        // so users downloading/launching v1.1.0 never keep seeing the old version in tray/UI!
         mutex_ = CreateMutexW(nullptr, FALSE, L"Local\\TypeCount_SingleInstance_v1");
         if (mutex_ && GetLastError() == ERROR_ALREADY_EXISTS) {
+            bool replaced = false;
+            HWND existing = nullptr;
             for (int i = 0; i < 16; ++i) {
-                HWND existing = FindWindowW(L"TypeCountCaptureHost", nullptr);
-                if (existing) {
-                    DWORD pid = 0;
-                    GetWindowThreadProcessId(existing, &pid);
-                    if (pid) AllowSetForegroundWindow(pid);
-                    PostMessageW(existing, WM_APP_ACTIVATE, 0, 0);
-                    break;
-                }
+                existing = FindWindowW(L"TypeCountCaptureHost", nullptr);
+                if (existing) break;
                 Sleep(50);
             }
-            CloseHandle(mutex_);
-            mutex_ = nullptr;
-            return 0;
+            if (existing) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(existing, &pid);
+                DWORD tid = GetWindowThreadProcessId(existing, nullptr);
+                int running_ver = 0;
+                if (pid != 0 && pid != GetCurrentProcessId()) {
+                    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+                    if (proc) {
+                        wchar_t exe_buf[MAX_PATH]{};
+                        DWORD len = MAX_PATH;
+                        if (QueryFullProcessImageNameW(proc, 0, exe_buf, &len)) {
+                            running_ver = read_file_version_num(exe_buf);
+                        }
+                        if (arg_replace || (running_ver > 0 && running_ver < TC_VERSION_NUM)) {
+                            PostMessageW(existing, WM_APP_REPLACE_FOR_UPGRADE, 0, 0);
+                            if (WaitForSingleObject(proc, 500) != WAIT_OBJECT_0) {
+                                if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
+                                if (WaitForSingleObject(proc, 400) != WAIT_OBJECT_0) {
+                                    TerminateProcess(proc, 0);
+                                    WaitForSingleObject(proc, 2000);
+                                }
+                            }
+                            CloseHandle(proc);
+                            CloseHandle(mutex_);
+                            mutex_ = nullptr;
+                            Sleep(150);
+                            mutex_ = CreateMutexW(nullptr, FALSE, L"Local\\TypeCount_SingleInstance_v1");
+                            replaced = true;
+                        } else {
+                            CloseHandle(proc);
+                        }
+                    }
+                }
+                if (!replaced) {
+                    if (pid) AllowSetForegroundWindow(pid);
+                    PostMessageW(existing, WM_APP_ACTIVATE, 0, 0);
+                    CloseHandle(mutex_);
+                    mutex_ = nullptr;
+                    return 0;
+                }
+            } else {
+                CloseHandle(mutex_);
+                mutex_ = nullptr;
+                return 0;
+            }
         }
 
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -80,8 +126,12 @@ public:
         bool prefs_existed = false;
         prefs_ = Preferences::load_file(to_utf8(prefs_path_), &prefs_existed);
         if (!prefs_existed && !arg_no_autostart && !demo_mode_) {
+            if (effective_locale() == "fa") prefs_.jalali_calendar = true;
             set_autostart_enabled(true);
             prefs_.save_file(to_utf8(prefs_path_));
+        } else if (!demo_mode_) {
+            // Keep Windows Run registry path synced to the currently launched binary (post-upgrade/move)
+            sync_autostart_path_if_enabled();
         }
 
         // Open SQLite DB (custom dir or default)
@@ -126,6 +176,9 @@ public:
         }
 
         SetTimer(capture_hwnd_, TIMER_FLUSH, 1500, nullptr);
+        if (prefs_.auto_check_updates && !demo_mode_) {
+            SetTimer(capture_hwnd_, TIMER_AUTO_UPDATE, 4500, nullptr);
+        }
 
         bool start_hidden = arg_background || arg_stealth || arg_tray;
         if (!start_hidden) {
@@ -154,6 +207,9 @@ private:
     bool paused_ = false;
     bool demo_mode_ = false;
     bool break_notified_ = false;
+    bool ergo_notified_ = false;
+    bool idle_paused_ = false;
+    bool typing_test_running_ = false;
 
     std::wstring data_dir_;
     std::wstring prefs_path_;
@@ -187,10 +243,25 @@ private:
     std::mutex ipc_mu_;
     std::deque<std::string> ipc_queue_;
 
+    // Update checker state
+    std::atomic<bool> update_checking_{false};
+    std::mutex update_mu_;
+    ReleaseCheckResult pending_update_res_;
+    std::string update_status_ = "idle";
+    std::string available_version_;
+    std::string available_release_url_ = TC_RELEASES_URL;
+    std::string available_download_url_;
+    bool update_manual_trigger_ = false;
+
+    std::string effective_locale() const {
+        return (prefs_.language == "system") ? resolve_system_locale() : prefs_.language;
+    }
+
     void shutdown() {
         KillTimer(capture_hwnd_, TIMER_FLUSH);
         KillTimer(capture_hwnd_, TIMER_SPORT);
         KillTimer(capture_hwnd_, TIMER_DISPOSE_UI);
+        KillTimer(capture_hwnd_, TIMER_AUTO_UPDATE);
         if (capture_hwnd_) UnregisterHotKey(capture_hwnd_, HOTKEY_WAKE_ID);
         remove_tray_icon();
         webview_.destroy();
@@ -326,7 +397,7 @@ private:
 
         std::wstring wv_dir = data_dir_ + L"\\WebView2";
         ensure_dir_wide(wv_dir);
-        std::string init_loc = (prefs_.language == "system") ? "en" : prefs_.language;
+        std::string init_loc = effective_locale();
 
         webview_.init(
             ui_hwnd_,
@@ -480,17 +551,27 @@ private:
         }
     }
 
-    void apply_wake_hotkey() {
-        if (!capture_hwnd_) return;
+    bool apply_wake_hotkey() {
+        if (!capture_hwnd_) return false;
         UnregisterHotKey(capture_hwnd_, HOTKEY_WAKE_ID);
         UINT mods = 0, vk = 0;
         if (parse_wake_hotkey(prefs_.wake_hotkey, mods, vk)) {
-            RegisterHotKey(capture_hwnd_, HOTKEY_WAKE_ID, mods, vk);
+            return RegisterHotKey(capture_hwnd_, HOTKEY_WAKE_ID, mods, vk) != FALSE;
         }
+        return false;
+    }
+
+    bool is_excluded_app(const std::string& app_name) const {
+        if (app_name.empty()) return false;
+        for (const auto& ex : prefs_.excluded_apps) {
+            if (_stricmp(app_name.c_str(), ex.c_str()) == 0) return true;
+        }
+        return false;
     }
 
     void handle_raw_input(HRAWINPUT hraw) {
         if (paused_) return;
+        if (typing_test_running_ && !prefs_.typing_test_count_stats) return;
 
         UINT size = 0;
         if (GetRawInputData(hraw, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER)) != 0 || size == 0) {
@@ -503,18 +584,15 @@ private:
 
         const RAWINPUT* ri = reinterpret_cast<const RAWINPUT*>(raw_buf_.data());
         int64_t now_ms = now_utc_ms();
-        int tz_off = current_tz_offset_sec();
+        int tz_off = timezone_offset_sec_for(prefs_.timezone);
         std::string app_name;
-        if (prefs_.track_apps) {
+        if (prefs_.track_apps || (prefs_.app_exclusions_enabled && !prefs_.excluded_apps.empty())) {
             app_name = foreground_process_name();
-            if (!app_name.empty()) {
-                for (const auto& ex : prefs_.excluded_apps) {
-                    if (_stricmp(app_name.c_str(), ex.c_str()) == 0) {
-                        app_name.clear();
-                        break;
-                    }
-                }
+            if (prefs_.app_exclusions_enabled && is_excluded_app(app_name)) {
+                if (prefs_.pause_in_excluded_apps) return;
+                app_name.clear();
             }
+            if (!prefs_.track_apps) app_name.clear();
         }
 
         if (ri->header.dwType == RIM_TYPEKEYBOARD) {
@@ -584,7 +662,7 @@ private:
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         nid.uCallbackMessage = WM_TRAYICON;
         nid.hIcon = app_icon_;
-        std::wstring tip = (prefs_.language == "fa")
+        std::wstring tip = (effective_locale() == "fa")
             ? L"TypeCount · شمارشگر کلید و ماوس (کلیک چپ برای بازکردن)"
             : L"TypeCount · Click left button to open";
         wcsncpy(nid.szTip, tip.c_str(), 127);
@@ -619,7 +697,7 @@ private:
     void show_tray_menu() {
         HMENU menu = CreatePopupMenu();
         if (!menu) return;
-        bool fa = (prefs_.language == "fa");
+        bool fa = (effective_locale() == "fa");
         AppendMenuW(menu, MF_STRING, MENU_OPEN, fa ? L"باز کردن TypeCount" : L"Open TypeCount");
         AppendMenuW(menu, MF_STRING | (prefs_.compact ? MF_CHECKED : 0), MENU_MINI, fa ? L"حالت کوچک (Mini)" : L"Mini mode");
         AppendMenuW(menu, MF_STRING, MENU_STEALTH, fa ? L"حالت مخفی کامل (بدون آیکون)" : L"Stealth mode (hide tray icon)");
@@ -657,7 +735,7 @@ private:
                 break;
             case MENU_AUTOSTART:
                 set_autostart_enabled(!is_autostart_enabled());
-                if (ui_visible_ && webview_.is_ready()) send_snapshot();
+                if (ui_visible_ && webview_.is_ready()) { send_view_state(); send_snapshot(); }
                 break;
             case MENU_QUIT:
                 PostQuitMessage(0);
@@ -673,23 +751,42 @@ private:
         }
         send_view_state();
         send_snapshot();
+        send_update_state();
     }
 
     void send_view_state() {
         if (!webview_.is_ready()) return;
         JsonValue v = prefs_.to_json();
-        v.set("locale", (prefs_.language == "system") ? "en" : prefs_.language);
+        v.set("app_version", std::string(TC_VERSION_STR));
+        v.set("locale", effective_locale());
         v.set("language_preference", prefs_.language);
         v.set("visible", ui_visible_);
         v.set("maximized", ui_hwnd_ ? (IsZoomed(ui_hwnd_) != FALSE) : false);
         v.set("fullscreen", false);
-        v.set("auto_check_updates", false);
+        v.set("auto_check_updates", prefs_.auto_check_updates);
+        v.set("last_update_check", prefs_.last_update_check);
+        v.set("msi_installed", !find_installed_msi_product_code().empty());
+        v.set("registered_uninstall", !find_registered_uninstall_command().empty());
 
         JsonValue tzs = JsonValue::array();
         for (const auto& z : system_timezones_list()) tzs.push(z);
         v.set("timezones", std::move(tzs));
 
         webview_.eval_js("window.receiveView(" + v.dump() + ");");
+    }
+
+    void send_update_state() {
+        if (!webview_.is_ready()) return;
+        JsonValue u = JsonValue::object();
+        u.set("current_version", std::string(TC_VERSION_STR));
+        u.set("automatic", prefs_.auto_check_updates);
+        u.set("status", update_status_);
+        u.set("checking", update_checking_.load());
+        u.set("available_version", available_version_);
+        u.set("release_url", available_release_url_);
+        u.set("download_url", available_download_url_);
+        u.set("last_checked_at", prefs_.last_update_check);
+        webview_.eval_js("window.receiveUpdateState(" + u.dump() + ");");
     }
 
     SnapshotQuery make_query() {
@@ -788,7 +885,8 @@ private:
 
     void send_sport_sample() {
         if (!webview_.is_ready() || !ui_visible_ || !prefs_.compact || !prefs_.sport_enabled) return;
-        auto live = engine_.get_live_metrics(now_utc_ms(), prefs_.break_interval_min);
+        int idle_s = prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180;
+        auto live = engine_.get_live_metrics(now_utc_ms(), prefs_.break_interval_min, idle_s);
         JsonValue s = JsonValue::object();
         s.set("available", true);
         s.set("paused", paused_);
@@ -811,6 +909,107 @@ private:
         }
     }
 
+    void start_update_check(bool manual) {
+        if (update_checking_.exchange(true)) return;
+        update_manual_trigger_ = manual;
+        update_status_ = "checking";
+        send_update_state();
+        std::thread([this]() {
+            ReleaseCheckResult res = fetch_latest_github_release();
+            {
+                std::lock_guard<std::mutex> lk(update_mu_);
+                pending_update_res_ = std::move(res);
+            }
+            if (capture_hwnd_) {
+                PostMessageW(capture_hwnd_, WM_APP_UPDATE_RESULT, 0, 0);
+            } else {
+                update_checking_.store(false);
+            }
+        }).detach();
+    }
+
+    void on_update_result() {
+        ReleaseCheckResult res;
+        {
+            std::lock_guard<std::mutex> lk(update_mu_);
+            res = pending_update_res_;
+        }
+        update_checking_.store(false);
+        prefs_.last_update_check = now_utc_ms() / 1000;
+        save_prefs();
+
+        if (!res.ok) {
+            update_status_ = res.rate_limited ? "rate_limited" : "error";
+            send_update_state();
+            if (update_manual_trigger_) {
+                toast_key(res.rate_limited ? "update.rate_limited" : "update.failed");
+            }
+            return;
+        }
+
+        available_release_url_ = res.release_url;
+        available_download_url_ = res.download_url;
+        int cmp = compare_semver(TC_VERSION_STR, res.latest_version);
+        if (cmp < 0) {
+            available_version_ = res.latest_version;
+            update_status_ = "available";
+            send_update_state();
+            if (webview_.is_ready()) {
+                JsonValue u = JsonValue::object();
+                u.set("current_version", std::string(TC_VERSION_STR));
+                u.set("version", res.latest_version);
+                u.set("release_url", res.release_url);
+                u.set("download_url", res.download_url);
+                webview_.eval_js("window.receiveUpdateAvailable(" + u.dump() + ");");
+            }
+            if (!prefs_.stealth_mode && tray_added_) {
+                bool fa = (effective_locale() == "fa");
+                show_tray_balloon(
+                    fa ? L"TypeCount · نسخه جدید آماده است" : L"TypeCount · Update Available",
+                    (fa ? L"نسخه v" : L"Version v") + to_wide(res.latest_version) +
+                        (fa ? L" در دسترس است. برای دریافت به تنظیمات بروید." : L" is available in Settings."));
+            }
+        } else {
+            available_version_.clear();
+            update_status_ = "up_to_date";
+            send_update_state();
+            if (update_manual_trigger_) {
+                toast_key("update.up_to_date");
+            }
+        }
+    }
+
+    void launch_uninstall() {
+        // 1. Installed via Windows Installer (.msi) -> launch msiexec /x {ProductCode}
+        std::wstring msi_code = find_installed_msi_product_code();
+        if (!msi_code.empty()) {
+            std::wstring args = L"/x " + msi_code;
+            ShellExecuteW(ui_hwnd_, L"open", L"msiexec.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+            toast_key("removal.running");
+            PostQuitMessage(0);
+            return;
+        }
+        // 2. Installed via TypeCount-Setup-x64.exe -> launch registered UninstallString
+        std::wstring cmd = find_registered_uninstall_command();
+        if (!cmd.empty()) {
+            STARTUPINFOW si{};
+            si.cb = sizeof(si);
+            PROCESS_INFORMATION pi{};
+            std::wstring mutable_cmd = cmd;
+            if (CreateProcessW(nullptr, &mutable_cmd[0], nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+                toast_key("removal.running");
+                PostQuitMessage(0);
+                return;
+            }
+        }
+        // 3. Fallback: disable autostart and open data/app folder so user can delete portable binary
+        set_autostart_enabled(false);
+        toast_key("removal.portable_hint");
+        ShellExecuteW(nullptr, L"open", exe_dir_wide().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
     void handle_ipc_message(const std::string& raw) {
         JsonValue msg;
         if (!JsonValue::parse(raw, msg) || !msg.is_object()) return;
@@ -819,6 +1018,7 @@ private:
         if (action == "ready") {
             send_view_state();
             send_snapshot();
+            send_update_state();
         } else if (action == "pause") {
             toggle_pause();
         } else if (action == "drag") {
@@ -876,7 +1076,11 @@ private:
             }
             send_view_state();
         } else if (action == "language") {
-            prefs_.language = msg.get("language").as_string_or("en");
+            std::string lang = msg.get("language").as_string_or("en");
+            prefs_.language = Preferences::is_valid_language(lang) ? lang : "en";
+            if (!demo_mode_ && db_.get_meta("jalali_user_set").empty()) {
+                prefs_.jalali_calendar = (effective_locale() == "fa");
+            }
             save_prefs();
             update_tray_tooltip();
             send_view_state();
@@ -924,9 +1128,16 @@ private:
             save_prefs();
             send_view_state();
         } else if (action == "wake_hotkey") {
+            std::string prev = prefs_.wake_hotkey;
             prefs_.wake_hotkey = msg.get("hotkey").as_string_or("Ctrl+Alt+Shift+T");
-            save_prefs();
-            apply_wake_hotkey();
+            if (apply_wake_hotkey()) {
+                save_prefs();
+                toast_key("message.saved");
+            } else {
+                prefs_.wake_hotkey = prev;
+                apply_wake_hotkey();
+                toast_key("message.hotkey_failed");
+            }
             send_view_state();
         } else if (action == "daily_goal") {
             prefs_.daily_goal = std::max<int64_t>(500, std::min<int64_t>(500000, msg.get("goal").as_int(8000)));
@@ -936,6 +1147,7 @@ private:
         } else if (action == "break_interval") {
             prefs_.break_interval_min = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(240, msg.get("minutes").as_int(45))));
             break_notified_ = false;
+            ergo_notified_ = false;
             save_prefs();
             send_view_state();
             send_snapshot();
@@ -951,11 +1163,15 @@ private:
         } else if (action == "reset_break") {
             engine_.reset_break_timer(now_utc_ms());
             break_notified_ = false;
+            ergo_notified_ = false;
             send_snapshot();
         } else if (action == "save_focus_session") {
             int dur = static_cast<int>(msg.get("duration_sec").as_int(1500));
             int64_t tot = msg.get("total").as_int(0);
             db_.record_focus_session(now_utc_ms() / 1000 - dur, dur, tot, 0, "Focus");
+            if (prefs_.sound_alerts_enabled) {
+                play_gentle_chime_async();
+            }
             send_snapshot();
         } else if (action == "sport") {
             prefs_.sport_enabled = msg.get("enabled").as_bool(false);
@@ -968,6 +1184,110 @@ private:
             send_view_state();
         } else if (action == "sport_sample") {
             send_sport_sample();
+        } else if (action == "typing_test_enabled") {
+            prefs_.typing_test_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+        } else if (action == "typing_test_count_stats") {
+            prefs_.typing_test_count_stats = msg.get("enabled").as_bool(false);
+            save_prefs();
+            send_view_state();
+        } else if (action == "typing_test_state") {
+            typing_test_running_ = msg.get("running").as_bool(false);
+        } else if (action == "save_typing_test") {
+            int dur = static_cast<int>(std::max<int64_t>(5, msg.get("duration_sec").as_int(30)));
+            double wpm = msg.get("wpm").as_double(0.0);
+            double raw_cpm = msg.get("raw_cpm").as_double(wpm * 5.0);
+            double acc = msg.get("accuracy").as_double(100.0);
+            int errors = static_cast<int>(std::max<int64_t>(0, msg.get("errors").as_int(0)));
+            int chars = static_cast<int>(std::max<int64_t>(0, msg.get("chars").as_int(0)));
+            std::string lang = msg.get("lang").as_string_or("en");
+            if (!demo_mode_) {
+                db_.record_typing_test(now_utc_ms() / 1000, dur, wpm, raw_cpm, acc, errors, chars, lang);
+            }
+            typing_test_running_ = false;
+            send_snapshot();
+        } else if (action == "ergo_insights_enabled") {
+            prefs_.ergo_insights_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "ergo_guard_enabled") {
+            prefs_.ergo_guard_enabled = msg.get("enabled").as_bool(true);
+            ergo_notified_ = false;
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "smart_alerts_enabled") {
+            prefs_.smart_alerts_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+        } else if (action == "sound_alerts_enabled") {
+            prefs_.sound_alerts_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+            send_view_state();
+        } else if (action == "app_exclusions_enabled") {
+            prefs_.app_exclusions_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "pause_in_excluded_apps") {
+            prefs_.pause_in_excluded_apps = msg.get("enabled").as_bool(false);
+            save_prefs();
+            send_view_state();
+        } else if (action == "exclude_app") {
+            std::string app = msg.get("app").as_string();
+            if (!app.empty() && !is_excluded_app(app)) {
+                prefs_.excluded_apps.push_back(app);
+                save_prefs();
+                toast_key("apps.excluded_toast");
+            }
+            send_view_state();
+            send_snapshot();
+        } else if (action == "unexclude_app") {
+            std::string app = msg.get("app").as_string();
+            if (!app.empty()) {
+                prefs_.excluded_apps.erase(
+                    std::remove_if(prefs_.excluded_apps.begin(), prefs_.excluded_apps.end(),
+                        [&](const std::string& x) { return _stricmp(x.c_str(), app.c_str()) == 0; }),
+                    prefs_.excluded_apps.end());
+                save_prefs();
+            }
+            send_view_state();
+            send_snapshot();
+        } else if (action == "idle_detection_enabled") {
+            prefs_.idle_detection_enabled = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "idle_timeout_sec") {
+            prefs_.idle_timeout_sec = static_cast<int>(std::max<int64_t>(30, std::min<int64_t>(900, msg.get("seconds").as_int(90))));
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "jalali_calendar") {
+            prefs_.jalali_calendar = msg.get("enabled").as_bool(true);
+            if (!demo_mode_) db_.set_meta("jalali_user_set", "1");
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "automatic_updates") {
+            prefs_.auto_check_updates = msg.get("enabled").as_bool(true);
+            save_prefs();
+            send_view_state();
+            send_update_state();
+            if (prefs_.auto_check_updates && !demo_mode_) {
+                start_update_check(false);
+            }
+        } else if (action == "check_updates") {
+            start_update_check(true);
+        } else if (action == "update_release" || action == "install_update") {
+            std::string url = (action == "install_update" && !available_download_url_.empty())
+                ? available_download_url_
+                : available_release_url_;
+            if (url.empty()) url = TC_RELEASES_URL;
+            ShellExecuteW(nullptr, L"open", to_wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         } else if (action == "session_state") {
             session_state_ = msg.get("state");
             if (session_state_.get("page").as_string() == "share") {
@@ -986,7 +1306,10 @@ private:
             bool cur = is_autostart_enabled();
             if (!set_autostart_enabled(!cur)) {
                 toast_key("message.autostart_failed");
+            } else {
+                toast_key(!cur ? "message.autostart_enabled" : "message.autostart_disabled");
             }
+            send_view_state();
             send_snapshot();
         } else if (action == "reveal") {
             std::wstring dir = prefs_.custom_db_dir.empty() ? data_dir_ : to_wide(prefs_.custom_db_dir);
@@ -997,7 +1320,14 @@ private:
                 engine_.flush();
                 std::wstring dst_db = chosen + L"\\typecount.sqlite3";
                 if (std::filesystem::exists(std::filesystem::path(dst_db))) {
-                    toast_key("storage.destination_exists");
+                    // Open existing database cleanly instead of failing silently
+                    prefs_.custom_db_dir = to_utf8(chosen);
+                    save_prefs();
+                    db_.open(to_utf8(dst_db));
+                    db_mode_ = "custom";
+                    toast_key("storage.opened_existing");
+                    send_view_state();
+                    send_snapshot();
                     return;
                 }
                 std::string err;
@@ -1006,11 +1336,27 @@ private:
                     save_prefs();
                     db_.open(to_utf8(dst_db));
                     db_mode_ = "custom";
+                    toast_key("storage.moved");
+                    send_view_state();
                     send_snapshot();
                 } else {
                     toast_key("storage.failed");
                 }
             }
+        } else if (action == "reset_storage_directory") {
+            if (!prefs_.custom_db_dir.empty()) {
+                engine_.flush();
+                std::wstring def_db = data_dir_ + L"\\typecount.sqlite3";
+                prefs_.custom_db_dir.clear();
+                save_prefs();
+                db_.open(to_utf8(def_db));
+                db_mode_ = "default";
+                toast_key("storage.reset_done");
+                send_view_state();
+                send_snapshot();
+            }
+        } else if (action == "uninstall") {
+            launch_uninstall();
         } else if (action == "import_history") {
             std::wstring src = open_sqlite_dialog(ui_hwnd_);
             if (!src.empty()) {
@@ -1097,8 +1443,9 @@ private:
     void on_flush_timer() {
         engine_.flush();
         int64_t ms = now_utc_ms();
-        int tz = current_tz_offset_sec();
+        int tz = timezone_offset_sec_for(prefs_.timezone);
         std::string today = Db::format_day(ms / 1000, tz);
+        bool fa = (effective_locale() == "fa");
 
         // Auto daily SQLite rotating backup
         if (prefs_.auto_backup && !demo_mode_ && last_backup_day_ != today) {
@@ -1106,12 +1453,16 @@ private:
             last_backup_day_ = today;
         }
 
-        // Break reminder notification
-        auto live = engine_.get_live_metrics(ms, prefs_.break_interval_min);
+        int idle_s = prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180;
+        auto live = engine_.get_live_metrics(ms, prefs_.break_interval_min, idle_s);
+
+        // Break reminder notification + optional gentle chime
         if (live.break_due && !break_notified_) {
             break_notified_ = true;
+            if (prefs_.sound_alerts_enabled) {
+                play_gentle_chime_async();
+            }
             if (!prefs_.stealth_mode && tray_added_) {
-                bool fa = (prefs_.language == "fa");
                 show_tray_balloon(
                     fa ? L"TypeCount · یادآور استراحت" : L"TypeCount · Break Reminder",
                     fa ? L"۲۰ ثانیه به دوردست نگاه کنید یا مچ دست خود را استراحت دهید."
@@ -1119,6 +1470,64 @@ private:
             }
         } else if (!live.break_due) {
             break_notified_ = false;
+        }
+
+        // Ergonomic RSI strain guard alert
+        if (prefs_.ergo_guard_enabled && live.ergo_strain_level >= 2 && !ergo_notified_) {
+            ergo_notified_ = true;
+            if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+            if (!prefs_.stealth_mode && tray_added_) {
+                show_tray_balloon(
+                    fa ? L"TypeCount · هشدار ارگونومی (RSI)" : L"TypeCount · Ergonomic Strain Guard",
+                    fa ? L"فشار تایپ/کلیک در ۱۰ دقیقه اخیر بالا بوده است؛ چند لحظه دست‌ها را استراحت دهید."
+                       : L"High 10-minute typing/click intensity detected. Take a 30-second wrist stretch.");
+            }
+            if (ui_visible_ && webview_.is_ready()) toast_key("ergo.strain_alert");
+        } else if (live.ergo_strain_level < 2) {
+            ergo_notified_ = false;
+        }
+
+        // Smart milestones (Daily Goal & New Peak WPM) evaluated cleanly via snapshot
+        if (prefs_.smart_alerts_enabled && !demo_mode_) {
+            JsonValue snap = engine_.snapshot(make_query());
+            int64_t today_total = snap.get("today").get("keyboard").as_int(0) + snap.get("today").get("mouse").as_int(0);
+            if (prefs_.daily_goal > 0 && today_total >= prefs_.daily_goal && db_.get_meta("goal_notified_day") != today) {
+                db_.set_meta("goal_notified_day", today);
+                if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+                if (!prefs_.stealth_mode && tray_added_) {
+                    show_tray_balloon(
+                        fa ? L"TypeCount · هدف روزانه کامل شد!" : L"TypeCount · Daily Goal Reached!",
+                        fa ? L"آفرین! به هدف روزانه فعالیت خود رسیدید." : L"Great work! You reached your daily activity target.");
+                }
+                if (ui_visible_ && webview_.is_ready()) toast_key("smart.goal_reached");
+            }
+            double peak_wpm = snap.get("today_peak_wpm").as_double(0.0);
+            double prev_best = 0.0;
+            std::string prev_best_s = db_.get_meta("best_wpm_record");
+            if (!prev_best_s.empty()) {
+                try { prev_best = std::stod(prev_best_s); } catch (...) {}
+            }
+            if (peak_wpm >= 35.0 && (prev_best <= 0.0 || peak_wpm >= prev_best + 2.0)) {
+                db_.set_meta("best_wpm_record", std::to_string(static_cast<int>(std::round(peak_wpm))));
+                if (prev_best > 0.0) {
+                    if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+                    if (!prefs_.stealth_mode && tray_added_) {
+                        show_tray_balloon(
+                            fa ? L"TypeCount · رکورد جدید سرعت تایپ!" : L"TypeCount · New Peak Speed Record!",
+                            (fa ? L"رکورد جدید سرعت تایپ: " : L"New peak typing speed: ") +
+                                std::to_wstring(static_cast<int>(std::round(peak_wpm))) + L" WPM");
+                    }
+                    if (ui_visible_ && webview_.is_ready()) toast_key("smart.new_record");
+                }
+            }
+            if (ui_visible_ && webview_.is_ready()) {
+                if (prefs_.compact) {
+                    webview_.eval_js("window.receiveMini(" + snap.dump() + ");");
+                } else {
+                    webview_.eval_js("window.receive(" + snap.dump() + ");");
+                }
+                return;
+            }
         }
 
         if (ui_visible_ && webview_.is_ready()) {
@@ -1161,8 +1570,16 @@ private:
             case WM_APP_ACTIVATE:
                 show_main_window();
                 return 0;
+            case WM_APP_REPLACE_FOR_UPGRADE:
+                engine_.flush();
+                save_prefs();
+                PostQuitMessage(0);
+                return 0;
             case WM_APP_IPC:
                 drain_ipc_queue();
+                return 0;
+            case WM_APP_UPDATE_RESULT:
+                on_update_result();
                 return 0;
             case WM_TRAYICON:
                 if (LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_LBUTTONDBLCLK) {
@@ -1174,6 +1591,15 @@ private:
             case WM_TIMER:
                 if (wp == TIMER_FLUSH) on_flush_timer();
                 else if (wp == TIMER_SPORT) send_sport_sample();
+                else if (wp == TIMER_AUTO_UPDATE) {
+                    KillTimer(hwnd, TIMER_AUTO_UPDATE);
+                    if (prefs_.auto_check_updates && !demo_mode_) {
+                        int64_t now_s = now_utc_ms() / 1000;
+                        if (prefs_.last_update_check <= 0 || (now_s - prefs_.last_update_check) >= 21600) {
+                            start_update_check(false);
+                        }
+                    }
+                }
                 else if (wp == TIMER_DISPOSE_UI) {
                     KillTimer(hwnd, TIMER_DISPOSE_UI);
                     if (!ui_visible_) {

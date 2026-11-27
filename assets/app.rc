@@ -1,11 +1,12 @@
 #include <windows.h>
+#include "../src/core/version.hpp"
 
 1 ICON "typecount.ico"
 1 24 "TypeCount.manifest"
 
 1 VERSIONINFO
-FILEVERSION 1,0,1,0
-PRODUCTVERSION 1,0,1,0
+FILEVERSION TC_VERSION_MAJOR,TC_VERSION_MINOR,TC_VERSION_PATCH,TC_VERSION_BUILD
+PRODUCTVERSION TC_VERSION_MAJOR,TC_VERSION_MINOR,TC_VERSION_PATCH,TC_VERSION_BUILD
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -17,13 +18,13 @@ BEGIN
     BLOCK "040904B0"
     BEGIN
       VALUE "CompanyName", "TypeCount"
-      VALUE "FileDescription", "TypeCount · Keyboard & Mouse Statistics"
-      VALUE "FileVersion", "1.0.1.0"
+      VALUE "FileDescription", "TypeCount \xB7 Keyboard & Mouse Statistics"
+      VALUE "FileVersion", TC_VERSION_STR_4
       VALUE "InternalName", "TypeCount"
       VALUE "LegalCopyright", "GPL-3.0-or-later"
       VALUE "OriginalFilename", "TypeCount.exe"
       VALUE "ProductName", "TypeCount"
-      VALUE "ProductVersion", "1.0.1.0"
+      VALUE "ProductVersion", TC_VERSION_STR_4
     END
   END
   BLOCK "VarFileInfo"
