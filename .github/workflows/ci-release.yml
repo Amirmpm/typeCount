@@ -120,14 +120,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REL_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
         run: |
-          if gh release view "$REL_TAG" >/dev/null 2>&1; then
+          ls -laR release-assets
+          if gh release view "$REL_TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
             gh release upload "$REL_TAG" \
+              -R "${{ github.repository }}" \
               release-assets/TypeCount-Setup-x64.msi \
               release-assets/TypeCount-Setup-x64.exe \
               release-assets/TypeCount.exe \
               --clobber
           else
             gh release create "$REL_TAG" \
+              -R "${{ github.repository }}" \
               release-assets/TypeCount-Setup-x64.msi \
               release-assets/TypeCount-Setup-x64.exe \
               release-assets/TypeCount.exe \
