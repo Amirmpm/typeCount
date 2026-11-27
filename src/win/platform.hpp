@@ -14,8 +14,16 @@
 #include <shlwapi.h>
 #include <psapi.h>
 #include <dwmapi.h>
+#include <winhttp.h>
+#include <mmsystem.h>
+#include <msi.h>
+
+#include "../core/json.hpp"
+#include "../core/version.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
@@ -49,6 +57,11 @@ inline std::wstring exe_path_wide() {
     DWORD n = GetModuleFileNameW(nullptr, &buf[0], static_cast<DWORD>(buf.size()));
     buf.resize(n);
     return buf;
+}
+
+inline std::wstring exe_dir_wide() {
+    std::filesystem::path p(exe_path_wide());
+    return p.parent_path().wstring();
 }
 
 inline std::wstring default_data_dir_wide() {
@@ -122,6 +135,24 @@ inline bool set_autostart_enabled(bool enabled) {
     }
     RegCloseKey(key);
     return ok;
+}
+
+inline void sync_autostart_path_if_enabled() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, RUN_REG_SUBKEY, 0, KEY_READ | KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
+        return;
+    }
+    wchar_t cur_buf[2048]{};
+    DWORD type = 0, size = sizeof(cur_buf);
+    if (RegQueryValueExW(key, RUN_REG_VALUE, nullptr, &type, reinterpret_cast<BYTE*>(cur_buf), &size) == ERROR_SUCCESS &&
+        (type == REG_SZ || type == REG_EXPAND_SZ) && size > 2) {
+        std::wstring desired = L"\"" + exe_path_wide() + L"\" --background";
+        if (_wcsicmp(cur_buf, desired.c_str()) != 0) {
+            DWORD bytes = static_cast<DWORD>((desired.size() + 1) * sizeof(wchar_t));
+            RegSetValueExW(key, RUN_REG_VALUE, 0, REG_SZ, reinterpret_cast<const BYTE*>(desired.c_str()), bytes);
+        }
+    }
+    RegCloseKey(key);
 }
 
 inline std::string foreground_process_name() {
@@ -400,6 +431,237 @@ inline std::vector<std::string> system_timezones_list() {
         "Asia/Singapore", "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul",
         "Australia/Sydney", "Pacific/Auckland"
     };
+}
+
+inline std::string resolve_system_locale() {
+    wchar_t name[LOCALE_NAME_MAX_LENGTH]{};
+    if (GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) > 0) {
+        std::string utf8 = to_utf8(name);
+        for (auto& c : utf8) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+        if (utf8.rfind("fa", 0) == 0 || utf8.rfind("pes", 0) == 0) return "fa";
+        if (utf8.rfind("zh", 0) == 0) {
+            if (utf8.find("hant") != std::string::npos || utf8.find("-tw") != std::string::npos ||
+                utf8.find("-hk") != std::string::npos || utf8.find("-mo") != std::string::npos) {
+                return "zh-TW";
+            }
+            return "zh-CN";
+        }
+        if (utf8.rfind("ja", 0) == 0) return "ja";
+        if (utf8.rfind("ko", 0) == 0) return "ko";
+        if (utf8.rfind("fr", 0) == 0) return "fr";
+        if (utf8.rfind("de", 0) == 0) return "de";
+        if (utf8.rfind("es", 0) == 0) return "es";
+    }
+    LANGID lid = PRIMARYLANGID(GetUserDefaultUILanguage());
+    if (lid == LANG_PERSIAN) return "fa";
+    if (lid == LANG_JAPANESE) return "ja";
+    if (lid == LANG_KOREAN) return "ko";
+    if (lid == LANG_FRENCH) return "fr";
+    if (lid == LANG_GERMAN) return "de";
+    if (lid == LANG_SPANISH) return "es";
+    return "en";
+}
+
+inline uint64_t idle_elapsed_ms() {
+    LASTINPUTINFO lii{};
+    lii.cbSize = sizeof(lii);
+    if (!GetLastInputInfo(&lii)) return 0;
+    uint64_t now = GetTickCount64();
+    uint64_t last = static_cast<uint64_t>(lii.dwTime);
+    uint64_t now32 = static_cast<uint64_t>(GetTickCount());
+    return (now32 >= last) ? (now32 - last) : 0;
+}
+
+inline void play_gentle_chime_async() {
+    // Synthesize a gentle two-tone sine chime (C5 -> G5) in memory once, zero external files
+    static std::vector<uint8_t> wav;
+    if (wav.empty()) {
+        const uint32_t rate = 22050;
+        const uint32_t num_samples = rate * 42 / 100; // 420ms
+        const uint32_t data_bytes = num_samples * 2;
+        const uint32_t file_size = 44 + data_bytes;
+        wav.resize(file_size, 0);
+        auto put32 = [&](size_t off, uint32_t v) {
+            wav[off] = v & 0xFF; wav[off + 1] = (v >> 8) & 0xFF;
+            wav[off + 2] = (v >> 16) & 0xFF; wav[off + 3] = (v >> 24) & 0xFF;
+        };
+        auto put16 = [&](size_t off, uint16_t v) {
+            wav[off] = v & 0xFF; wav[off + 1] = (v >> 8) & 0xFF;
+        };
+        memcpy(&wav[0], "RIFF", 4); put32(4, file_size - 8); memcpy(&wav[8], "WAVE", 4);
+        memcpy(&wav[12], "fmt ", 4); put32(16, 16); put16(20, 1); put16(22, 1);
+        put32(24, rate); put32(28, rate * 2); put16(32, 2); put16(34, 16);
+        memcpy(&wav[36], "data", 4); put32(40, data_bytes);
+        const double pi2 = 6.283185307179586;
+        for (uint32_t i = 0; i < num_samples; ++i) {
+            double t = static_cast<double>(i) / rate;
+            double note1 = std::sin(pi2 * 523.25 * t) * std::exp(-t * 7.5);
+            double t2 = std::max(0.0, t - 0.14);
+            double note2 = (t >= 0.14) ? std::sin(pi2 * 783.99 * t2) * std::exp(-t2 * 6.5) : 0.0;
+            double env_in = std::min(1.0, t / 0.015);
+            double sample = (note1 * 0.45 + note2 * 0.55) * env_in * 0.30;
+            int16_t pcm = static_cast<int16_t>(std::max(-32767.0, std::min(32767.0, sample * 32767.0)));
+            put16(44 + i * 2, static_cast<uint16_t>(pcm));
+        }
+    }
+    PlaySoundW(reinterpret_cast<LPCWSTR>(wav.data()), nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+}
+
+inline int read_file_version_num(const std::wstring& exe_path) {
+    DWORD handle = 0;
+    DWORD sz = GetFileVersionInfoSizeW(exe_path.c_str(), &handle);
+    if (sz == 0) return 0;
+    std::vector<uint8_t> buf(sz);
+    if (!GetFileVersionInfoW(exe_path.c_str(), 0, sz, buf.data())) return 0;
+    VS_FIXEDFILEINFO* ffi = nullptr;
+    UINT len = 0;
+    if (!VerQueryValueW(buf.data(), L"\\", reinterpret_cast<void**>(&ffi), &len) || !ffi) return 0;
+    int maj = HIWORD(ffi->dwFileVersionMS);
+    int min = LOWORD(ffi->dwFileVersionMS);
+    int pat = HIWORD(ffi->dwFileVersionLS);
+    return (maj * 10000) + (min * 100) + pat;
+}
+
+inline std::wstring find_installed_msi_product_code() {
+    wchar_t prod[64]{};
+    if (MsiEnumRelatedProductsW(TC_UPGRADE_GUID_W, 0, 0, prod) == ERROR_SUCCESS && prod[0] != L'\0') {
+        return std::wstring(prod);
+    }
+    return {};
+}
+
+inline std::wstring find_registered_uninstall_command() {
+    const HKEY roots[] = {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    const wchar_t* subkey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TypeCount";
+    for (HKEY root : roots) {
+        HKEY k = nullptr;
+        if (RegOpenKeyExW(root, subkey, 0, KEY_READ, &k) == ERROR_SUCCESS) {
+            wchar_t cmd[2048]{};
+            DWORD type = 0, sz = sizeof(cmd);
+            if (RegQueryValueExW(k, L"UninstallString", nullptr, &type, reinterpret_cast<BYTE*>(cmd), &sz) == ERROR_SUCCESS &&
+                (type == REG_SZ || type == REG_EXPAND_SZ) && cmd[0] != L'\0') {
+                RegCloseKey(k);
+                return std::wstring(cmd);
+            }
+            RegCloseKey(k);
+        }
+    }
+    return {};
+}
+
+inline std::array<int, 3> parse_semver(const std::string& raw) {
+    std::string s = raw;
+    if (!s.empty() && (s[0] == 'v' || s[0] == 'V')) s.erase(s.begin());
+    std::array<int, 3> out{0, 0, 0};
+    size_t pos = 0;
+    for (int i = 0; i < 3 && pos < s.size(); ++i) {
+        int val = 0;
+        bool any = false;
+        while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') {
+            val = val * 10 + (s[pos] - '0');
+            any = true;
+            ++pos;
+        }
+        if (any) out[i] = val;
+        if (pos < s.size() && s[pos] == '.') ++pos;
+        else break;
+    }
+    return out;
+}
+
+inline int compare_semver(const std::string& a, const std::string& b) {
+    auto pa = parse_semver(a);
+    auto pb = parse_semver(b);
+    for (int i = 0; i < 3; ++i) {
+        if (pa[i] < pb[i]) return -1;
+        if (pa[i] > pb[i]) return 1;
+    }
+    return 0;
+}
+
+struct ReleaseCheckResult {
+    bool ok = false;
+    bool rate_limited = false;
+    std::string latest_version;
+    std::string release_url = TC_RELEASES_URL;
+    std::string download_url;
+    std::string error;
+};
+
+inline ReleaseCheckResult fetch_latest_github_release() {
+    ReleaseCheckResult res;
+    HINTERNET ses = WinHttpOpen(L"TypeCount/" TC_VERSION_WSTR,
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) { res.error = "WinHttpOpen failed"; return res; }
+    WinHttpSetTimeouts(ses, 5000, 6000, 6000, 8000);
+
+    HINTERNET con = WinHttpConnect(ses, TC_LATEST_RELEASE_API_HOST, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!con) { WinHttpCloseHandle(ses); res.error = "WinHttpConnect failed"; return res; }
+
+    HINTERNET req = WinHttpOpenRequest(con, L"GET", TC_LATEST_RELEASE_API_PATH,
+        nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!req) { WinHttpCloseHandle(con); WinHttpCloseHandle(ses); res.error = "WinHttpOpenRequest failed"; return res; }
+
+    WinHttpAddRequestHeaders(req, L"Accept: application/vnd.github+json\r\n", -1L, WINHTTP_ADDREQ_FLAG_ADD);
+    BOOL ok = WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+              WinHttpReceiveResponse(req, nullptr);
+    if (!ok) {
+        WinHttpCloseHandle(req); WinHttpCloseHandle(con); WinHttpCloseHandle(ses);
+        res.error = "Network request failed";
+        return res;
+    }
+
+    DWORD status = 0, ssz = sizeof(status);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &ssz, WINHTTP_NO_HEADER_INDEX);
+    if (status == 403 || status == 429) {
+        WinHttpCloseHandle(req); WinHttpCloseHandle(con); WinHttpCloseHandle(ses);
+        res.rate_limited = true;
+        res.error = "GitHub rate limit";
+        return res;
+    }
+    if (status < 200 || status >= 300) {
+        WinHttpCloseHandle(req); WinHttpCloseHandle(con); WinHttpCloseHandle(ses);
+        res.error = "HTTP " + std::to_string(status);
+        return res;
+    }
+
+    std::string body;
+    DWORD avail = 0;
+    while (WinHttpQueryDataAvailable(req, &avail) && avail > 0) {
+        std::string chunk(avail, '\0');
+        DWORD read = 0;
+        if (!WinHttpReadData(req, &chunk[0], avail, &read) || read == 0) break;
+        chunk.resize(read);
+        body += chunk;
+        if (body.size() > 512 * 1024) break;
+    }
+    WinHttpCloseHandle(req); WinHttpCloseHandle(con); WinHttpCloseHandle(ses);
+
+    JsonValue doc;
+    if (!JsonValue::parse(body, doc) || !doc.is_object()) {
+        res.error = "Invalid JSON response";
+        return res;
+    }
+    std::string tag = doc.get("tag_name").as_string();
+    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag.erase(tag.begin());
+    res.latest_version = tag;
+    std::string html_url = doc.get("html_url").as_string();
+    if (!html_url.empty()) res.release_url = html_url;
+
+    std::string msi_url, exe_url;
+    const auto& assets = doc.get("assets");
+    if (assets.is_array()) {
+        for (const auto& a : assets.arr) {
+            std::string name = a.get("name").as_string();
+            std::string dl = a.get("browser_download_url").as_string();
+            if (name.size() >= 4 && name.substr(name.size() - 4) == ".msi") msi_url = dl;
+            else if (name.size() >= 4 && name.substr(name.size() - 4) == ".exe") exe_url = dl;
+        }
+    }
+    res.download_url = !msi_url.empty() ? msi_url : (!exe_url.empty() ? exe_url : res.release_url);
+    res.ok = !res.latest_version.empty();
+    return res;
 }
 
 } // namespace win

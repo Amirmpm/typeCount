@@ -17,6 +17,7 @@
 #include "WebView2.h"
 #include "detail/platform/windows/webview2/loader.hh"
 
+#include "../core/version.hpp"
 #include "platform.hpp"
 #include "ui_bundle.hpp"
 
@@ -219,7 +220,8 @@ private:
             std::string boot =
                 "window.clickpulseLocale=" + JsonValue::escape_string(owner_->initial_locale_) + ";"
                 "window.clickpulsePlatform='windows';"
-                "window.clickpulseTheme=" + JsonValue::escape_string(owner_->initial_theme_) + ";";
+                "window.clickpulseTheme=" + JsonValue::escape_string(owner_->initial_theme_) + ";"
+                "window.typeCountVersion=" + JsonValue::escape_string(TC_VERSION_STR) + ";";
             owner_->webview_->AddScriptToExecuteOnDocumentCreated(to_wide(boot).c_str(), nullptr);
 
             owner_->resize_to_parent();

@@ -11,6 +11,18 @@ const H = require(path.join(uiDir, 'history.js'));
 const K = require(path.join(uiDir, 'keyboard.js'));
 const C = require(path.join(uiDir, 'shortcuts-catalog.js'));
 const T = require(path.join(uiDir, 'themes.js'));
+const J = require(path.join(uiDir, 'jalali.js'));
+
+// 0. Jalali calendar roundtrip & Persian leap year checks
+const j1 = J.toJalali(2026, 11, 27);
+assert.deepStrictEqual(j1, { jy: 1405, jm: 9, jd: 6 });
+assert.deepStrictEqual(J.toGregorian(1405, 9, 6), { gy: 2026, gm: 11, gd: 27 });
+assert.deepStrictEqual(J.toJalali(2025, 3, 20), { jy: 1403, jm: 12, jd: 30 }); // leap year 1403 Esfand 30
+assert.deepStrictEqual(J.toGregorian(1403, 12, 30), { gy: 2025, gm: 3, gd: 20 });
+const jFmtFa = J.formatJalaliDate(new Date('2026-11-27T12:00:00Z'), { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }, 'fa', new Intl.NumberFormat('fa-IR', { useGrouping: false }));
+assert(jFmtFa.includes('آذر') && jFmtFa.includes('۱۴۰۵'), `Expected Persian Azar 1405, got ${jFmtFa}`);
+const jFmtEn = J.formatJalaliDate(new Date('2026-11-27T12:00:00Z'), { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }, 'en');
+assert(jFmtEn.includes('Azar') && jFmtEn.includes('1405'), `Expected Azar 1405, got ${jFmtEn}`);
 
 // 1. Locale completeness (en vs fa)
 const enKeys = Object.keys(locales.en);
@@ -47,15 +59,22 @@ assert.deepStrictEqual(parts, ['Ctrl', 'C']);
 const scale = H.countScale(1250);
 assert(scale.ceiling >= 1250 && scale.ticks.length >= 2);
 
-// 4. index.html required sections, version 1.0.1 & asset integrity
+// 4. index.html required sections, version 1.1.0 & asset integrity
 const html = fs.readFileSync(path.join(uiDir, 'index.html'), 'utf8');
 assert(!html.includes('ClickPulse'), 'Found leftover ClickPulse string in index.html');
-assert(html.includes('>1.0.1<'), 'Expected sidebar version 1.0.1 in index.html');
+assert(html.includes('>1.1.0<'), 'Expected sidebar version 1.1.0 in index.html');
+assert(html.includes('jalali.js'), 'index.html must load jalali.js');
 for (const id of [
-  'overview', 'history', 'keys', 'apps', 'shortcuts', 'share', 'settings',
+  'overview', 'history', 'keys', 'apps', 'typingtest', 'typingtest-nav', 'shortcuts', 'share', 'settings',
   'mini-widget', 'close-overlay', 'tc-live-wpm', 'tc-goal-fill', 'tc-apps-list',
+  'tc-ergo-card', 'tc-exclusions-card', 'tc-exclude-input', 'tc-exclude-add',
+  'tc-tt-passage', 'tc-tt-input', 'tc-tt-restart', 'tc-tt-history',
   'tc-stealth-enter', 'tc-wake-hotkey-select', 'tc-startup-mode-select',
-  'tc-export-csv', 'tc-export-json', 'tc-backup-now', 'language-select',
+  'tc-typing-test-switch', 'tc-typing-test-stats-switch', 'tc-ergo-insights-switch',
+  'tc-ergo-guard-switch', 'tc-smart-alerts-switch', 'tc-sound-alerts-switch',
+  'tc-app-exclusions-switch', 'tc-pause-excluded-switch', 'tc-idle-detection-switch',
+  'tc-idle-timeout-select', 'tc-jalali-switch', 'sport-enabled', 'automatic-updates',
+  'reset-storage-directory', 'tc-export-csv', 'tc-export-json', 'tc-backup-now', 'language-select',
   'window-minimize', 'window-maximize', 'window-close'
 ]) {
   assert(html.includes(`id="${id}"`), `Missing element #${id} in index.html`);
@@ -125,9 +144,12 @@ class MockNode {
   }
   click() { this.dispatchEvent({ type: 'click', button: 0 }); }
   focus() {}
+  select() {}
   scrollIntoView() {}
   closest() { return null; }
   contains() { return false; }
+  querySelector() { return null; }
+  querySelectorAll() { return []; }
   getBoundingClientRect() { return { left: 0, top: 0, right: 200, bottom: 40, width: 200, height: 40 }; }
   getContext() { return null; }
 }
@@ -175,6 +197,15 @@ for (const id of [
   'tc-apps-list', 'tc-apps-empty', 'shortcut-loading', 'shortcut-dashboard',
   'shortcut-atlas', 'shortcut-ranking', 'shortcut-details', 'shortcut-details-title',
   'shortcut-search', 'shortcut-list', 'shortcut-more', 'share-workspace', 'share-start-field',
+  'typingtest', 'typingtest-nav', 'tc-ergo-card', 'tc-focus-score', 'tc-active-time',
+  'tc-peak-hour', 'tc-strain-badge', 'tc-strain-ops',
+  'tc-exclusions-card', 'tc-exclude-input', 'tc-exclude-add', 'tc-excluded-list', 'tc-excluded-empty',
+  'tc-tt-wpm', 'tc-tt-acc', 'tc-tt-err', 'tc-tt-timer-label', 'tc-tt-best',
+  'tc-tt-passage', 'tc-tt-input', 'tc-tt-restart', 'tc-tt-history', 'tc-tt-empty', 'tc-tt-hint', 'tc-tt-stage',
+  'tc-typing-test-switch', 'tc-typing-test-stats-switch', 'tc-ergo-insights-switch',
+  'tc-ergo-guard-switch', 'tc-smart-alerts-switch', 'tc-sound-alerts-switch',
+  'tc-app-exclusions-switch', 'tc-pause-excluded-switch', 'tc-idle-detection-switch',
+  'tc-idle-timeout-row', 'tc-jalali-switch', 'sport-enabled', 'reset-storage-directory',
   'share-start-label', 'share-start', 'share-start-trigger', 'share-start-value',
   'share-date-label', 'share-date-caption', 'share-date', 'share-date-trigger',
   'share-date-value', 'share-save', 'share-copy', 'share-prompt-panel', 'share-prompt-text',
@@ -211,6 +242,9 @@ makeEl('share-style-select', 'select', ['blue', 'paper', 'ink', 'pine', 'clay', 
 makeEl('tc-break-interval-select', 'select', ['0', '20', '45', '60']);
 makeEl('tc-startup-mode-select', 'select', ['tray', 'stealth']);
 makeEl('tc-wake-hotkey-select', 'select', ['Ctrl+Alt+Shift+T', 'None']);
+makeEl('tc-idle-timeout-select', 'select', ['30', '60', '120', '300']);
+makeEl('tc-tt-lang', 'select', ['en', 'fa', 'code']);
+makeEl('tc-tt-dur', 'select', ['15', '30', '60']);
 makeEl('keyboard-layout').parentElement = new MockNode('div');
 
 const headerEl = new MockNode('header');
@@ -344,4 +378,68 @@ sandbox.receive({
 assert.strictEqual(byId.get('tc-live-wpm').textContent, '62.5');
 assert.strictEqual(byId.get('tc-today-distance').textContent, '12.4');
 
-console.log(`All Node UI, DOM script execution, window controls & i18n checks passed (${enKeys.length} en keys, ${faKeys.length} fa keys)!`);
+// Verify Jalali toggle & Persian date formatting via I.day
+sandbox.receiveView({
+  locale: 'fa',
+  language_preference: 'fa',
+  jalali_calendar: true,
+  theme: 'blue',
+  ui_scale: '100',
+  compact: false,
+  maximized: false,
+  close_action: 'ask',
+  timezones: ['UTC', 'Asia/Tehran']
+});
+const faJalaliDay = vm.runInContext("I.day('2026-11-27')", sandbox);
+assert(faJalaliDay.includes('آذر') && faJalaliDay.includes('۱۴۰۵'), `Expected Jalali Azar 1405 via I.day, got ${faJalaliDay}`);
+
+// Verify v1.1.0 settings toggles emit exact IPC messages
+for (const [elId, expectedAction] of [
+  ['tc-typing-test-switch', 'typing_test_enabled'],
+  ['tc-typing-test-stats-switch', 'typing_test_count_stats'],
+  ['tc-ergo-insights-switch', 'ergo_insights_enabled'],
+  ['tc-ergo-guard-switch', 'ergo_guard_enabled'],
+  ['tc-smart-alerts-switch', 'smart_alerts_enabled'],
+  ['tc-sound-alerts-switch', 'sound_alerts_enabled'],
+  ['tc-app-exclusions-switch', 'app_exclusions_enabled'],
+  ['tc-pause-excluded-switch', 'pause_in_excluded_apps'],
+  ['tc-idle-detection-switch', 'idle_detection_enabled'],
+  ['tc-jalali-switch', 'jalali_calendar'],
+  ['sport-enabled', 'sport'],
+  ['automatic-updates', 'automatic_updates']
+]) {
+  sentIpc.length = 0;
+  const sw = byId.get(elId);
+  sw.checked = !sw.checked;
+  sw.dispatchEvent({ type: 'change', target: sw });
+  assert(sentIpc.some(m => m.action === expectedAction), `Changing #${elId} must emit ${expectedAction}`);
+}
+
+// Verify focus-safe input protection on #tc-daily-goal-input
+const goalInput = byId.get('tc-daily-goal-input');
+goalInput.value = '12345';
+sandbox.document.activeElement = goalInput;
+sandbox.receive({
+  now: '2026-11-27T12:00:00',
+  timezone: 'system',
+  today_period: 'calendar_day',
+  paused: false,
+  demo: false,
+  auto_start: true,
+  auto_start_available: true,
+  database_path: 'C:\\Users\\Test\\AppData\\Local\\TypeCount\\typecount.sqlite3',
+  database_mode: 'default',
+  capture: { listening: true, permission_needed: false, error: null, error_code: null },
+  today: { keyboard: 1200, mouse: 350 },
+  week: { keyboard: 8400, mouse: 2100 },
+  lifetime: { keyboard: 42000, mouse: 12000 },
+  windows: [], hourly: [], hours: [], days: [], history_days: [],
+  keyboard_stats: { physical: [] }, mouse_buttons: {}, shortcuts: [],
+  apps_today: [], apps_lifetime: [],
+  daily_goal: 8000, goal_target: 8000, dpi_ppi: 96,
+  focus_score: 86, today_active_sec: 1400, peak_hour: 12, ergo_10m_ops: 280
+});
+assert.strictEqual(goalInput.value, '12345', 'Focused input value must not be overwritten during live snapshot');
+sandbox.document.activeElement = null;
+
+console.log(`All Node UI, Jalali, v1.1.0 toggles, DOM script execution, window controls & i18n checks passed (${enKeys.length} en keys, ${faKeys.length} fa keys)!`);

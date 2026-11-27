@@ -27,6 +27,19 @@ struct Preferences {
     bool sport_visible = true;
     bool ignore_software_input = false;
     bool track_apps = true;
+    bool app_exclusions_enabled = true;
+    bool pause_in_excluded_apps = false;
+    bool idle_detection_enabled = true;
+    int idle_timeout_sec = 180;           // 60, 180, 300, 600
+    bool typing_test_enabled = true;
+    bool typing_test_count_stats = false;
+    bool ergo_insights_enabled = true;
+    bool ergo_guard_enabled = true;
+    bool smart_alerts_enabled = true;
+    bool sound_alerts_enabled = true;
+    bool jalali_calendar = false;
+    bool auto_check_updates = true;
+    int64_t last_update_check = 0;
     bool auto_backup = true;
     bool sidebar_collapsed = false;
     int64_t daily_goal = 8000;
@@ -38,6 +51,12 @@ struct Preferences {
     int window_y = -1;
     std::string custom_db_dir;
     std::vector<std::string> excluded_apps;
+
+    static bool is_valid_language(const std::string& lang) {
+        return lang == "en" || lang == "fa" || lang == "system" ||
+               lang == "zh-CN" || lang == "zh-TW" || lang == "ja" ||
+               lang == "ko" || lang == "fr" || lang == "de" || lang == "es";
+    }
 
     JsonValue to_json() const {
         JsonValue o = JsonValue::object();
@@ -58,6 +77,19 @@ struct Preferences {
         o.set("sport_visible", sport_visible);
         o.set("ignore_software_input", ignore_software_input);
         o.set("track_apps", track_apps);
+        o.set("app_exclusions_enabled", app_exclusions_enabled);
+        o.set("pause_in_excluded_apps", pause_in_excluded_apps);
+        o.set("idle_detection_enabled", idle_detection_enabled);
+        o.set("idle_timeout_sec", idle_timeout_sec);
+        o.set("typing_test_enabled", typing_test_enabled);
+        o.set("typing_test_count_stats", typing_test_count_stats);
+        o.set("ergo_insights_enabled", ergo_insights_enabled);
+        o.set("ergo_guard_enabled", ergo_guard_enabled);
+        o.set("smart_alerts_enabled", smart_alerts_enabled);
+        o.set("sound_alerts_enabled", sound_alerts_enabled);
+        o.set("jalali_calendar", jalali_calendar);
+        o.set("auto_check_updates", auto_check_updates);
+        o.set("last_update_check", last_update_check);
         o.set("auto_backup", auto_backup);
         o.set("sidebar_collapsed", sidebar_collapsed);
         o.set("daily_goal", daily_goal);
@@ -78,7 +110,7 @@ struct Preferences {
         Preferences p;
         if (!o.is_object()) return p;
         p.language = o.get("language").as_string_or("en");
-        if (p.language != "en" && p.language != "fa" && p.language != "system") p.language = "en";
+        if (!is_valid_language(p.language)) p.language = "en";
 
         p.theme = o.get("theme").as_string_or("blue");
         if (p.theme != "blue" && p.theme != "teal" && p.theme != "violet" && p.theme != "graphite") p.theme = "blue";
@@ -116,6 +148,19 @@ struct Preferences {
         p.sport_visible = o.get("sport_visible").as_bool(true);
         p.ignore_software_input = o.get("ignore_software_input").as_bool(false);
         p.track_apps = o.get("track_apps").as_bool(true);
+        p.app_exclusions_enabled = o.get("app_exclusions_enabled").as_bool(true);
+        p.pause_in_excluded_apps = o.get("pause_in_excluded_apps").as_bool(false);
+        p.idle_detection_enabled = o.get("idle_detection_enabled").as_bool(true);
+        p.idle_timeout_sec = static_cast<int>(std::max<int64_t>(30, std::min<int64_t>(1800, o.get("idle_timeout_sec").as_int(180))));
+        p.typing_test_enabled = o.get("typing_test_enabled").as_bool(true);
+        p.typing_test_count_stats = o.get("typing_test_count_stats").as_bool(false);
+        p.ergo_insights_enabled = o.get("ergo_insights_enabled").as_bool(true);
+        p.ergo_guard_enabled = o.get("ergo_guard_enabled").as_bool(true);
+        p.smart_alerts_enabled = o.get("smart_alerts_enabled").as_bool(true);
+        p.sound_alerts_enabled = o.get("sound_alerts_enabled").as_bool(true);
+        p.jalali_calendar = o.get("jalali_calendar").as_bool(false);
+        p.auto_check_updates = o.get("auto_check_updates").as_bool(true);
+        p.last_update_check = o.get("last_update_check").as_int(0);
         p.auto_backup = o.get("auto_backup").as_bool(true);
         p.sidebar_collapsed = o.get("sidebar_collapsed").as_bool(false);
         p.daily_goal = std::max<int64_t>(500, std::min<int64_t>(500000, o.get("daily_goal").as_int(8000)));

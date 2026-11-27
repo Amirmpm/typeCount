@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag to publish (e.g. v1.0.1)"
+        description: "Optional release tag to publish (e.g. v1.1.0)"
         required: false
         default: ""
 
@@ -35,28 +35,102 @@ jobs:
             tests/test_core.cpp src/core/db.cpp tests/bin/sqlite3.o \
             -lpthread -ldl -o tests/bin/test_core
           ./tests/bin/test_core
-      - name: Run UI & i18n tests
+      - name: Run UI, Jalali & i18n tests
         run: node tests/test_ui.cjs
-      - name: Cross-compile TypeCount.exe via Zig
+      - name: Cross-compile TypeCount.exe & TypeCount-Setup-x64.exe via Zig
         run: |
           python3 -m pip install --quiet ziglang
           ZIG_BIN="$(python3 -c 'import ziglang, pathlib; print(pathlib.Path(ziglang.__file__).parent / "zig")')"
           ZIG_BIN="$ZIG_BIN" bash scripts/build_windows.sh
-      - name: Upload TypeCount.exe artifact
+      - name: Upload Windows binaries
         uses: actions/upload-artifact@v4
         with:
           name: TypeCount-windows-x64
-          path: releases/TypeCount.exe
+          path: |
+            releases/TypeCount.exe
+            releases/TypeCount-Setup-x64.exe
+
+  build-windows-msi:
+    needs: test-core-and-ui
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: TypeCount-windows-x64
+          path: releases
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install WiX Toolset v5
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix extension add -g WixToolset.Util.wixext/5.0.2
+      - name: Build & verify TypeCount-Setup-x64.msi
+        shell: pwsh
+        run: |
+          $hdr = Get-Content src/core/version.hpp -Raw
+          if ($hdr -match '#define TC_VERSION_STR_4\s+"([^"]+)"') { $ver = $Matches[1] } else { $ver = "1.1.0.0" }
+          Write-Host "Building TypeCount MSI version $ver"
+          $wixOut = & wix build installer/TypeCount.wxs `
+            -arch x64 `
+            -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
+            -d "AppVersion=$ver" `
+            -o releases/TypeCount-Setup-x64.msi 2>&1
+          $wixOut | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path releases/TypeCount-Setup-x64.msi)) {
+            $errLine = ($wixOut | Out-String) -replace "`r?`n", " | "
+            Write-Host "::error::$errLine"
+            throw "MSI build failed with exit $LASTEXITCODE"
+          }
+          New-Item -ItemType Directory -Force -Path msi_verify | Out-Null
+          $msiPath = (Resolve-Path releases/TypeCount-Setup-x64.msi).Path
+          $targetDir = (Resolve-Path msi_verify).Path
+          $p = Start-Process msiexec.exe -ArgumentList "/a `"$msiPath`" /qn TARGETDIR=`"$targetDir`" /l*v msi_admin.log" -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            $logTail = (Get-Content msi_admin.log -Tail 30 | Out-String) -replace "`r?`n", " | "
+            Write-Host "::error::msiexec exited $($p.ExitCode): $logTail"
+            throw "msiexec admin unpack exited $($p.ExitCode)"
+          }
+          Get-ChildItem -Recurse msi_verify -Filter TypeCount.exe | Select-Object FullName, Length
+          Remove-Item -Recurse -Force msi_verify, msi_admin.log -ErrorAction SilentlyContinue
+      - name: Upload Windows Release Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeCount-windows-release
+          path: |
+            releases/TypeCount.exe
+            releases/TypeCount-Setup-x64.exe
+            releases/TypeCount-Setup-x64.msi
+
+  publish-release:
+    needs: [test-core-and-ui, build-windows-msi]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: TypeCount-windows-release
+          path: release-assets
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REL_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
         run: |
           if gh release view "$REL_TAG" >/dev/null 2>&1; then
-            gh release upload "$REL_TAG" releases/TypeCount.exe --clobber
+            gh release upload "$REL_TAG" \
+              release-assets/TypeCount-Setup-x64.msi \
+              release-assets/TypeCount-Setup-x64.exe \
+              release-assets/TypeCount.exe \
+              --clobber
           else
-            gh release create "$REL_TAG" releases/TypeCount.exe \
+            gh release create "$REL_TAG" \
+              release-assets/TypeCount-Setup-x64.msi \
+              release-assets/TypeCount-Setup-x64.exe \
+              release-assets/TypeCount.exe \
               --target main \
               --title "TypeCount $REL_TAG" \
               --generate-notes

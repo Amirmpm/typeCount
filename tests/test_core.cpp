@@ -3,6 +3,7 @@
 #include "../src/core/json.hpp"
 #include "../src/core/key_mapper.hpp"
 #include "../src/core/preferences.hpp"
+#include "../src/core/version.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -95,6 +96,19 @@ void test_preferences() {
     p.wake_hotkey = "Ctrl+Alt+K";
     p.daily_goal = 12000;
     p.excluded_apps = {"keepass.exe"};
+    p.typing_test_enabled = false;
+    p.typing_test_count_stats = true;
+    p.ergo_insights_enabled = false;
+    p.ergo_guard_enabled = false;
+    p.smart_alerts_enabled = false;
+    p.sound_alerts_enabled = false;
+    p.app_exclusions_enabled = false;
+    p.pause_in_excluded_apps = true;
+    p.idle_detection_enabled = false;
+    p.idle_timeout_sec = 180;
+    p.jalali_calendar = true;
+    p.auto_check_updates = false;
+    p.last_update_check = 1764244800LL;
     assert(p.save_file(tmp.string()));
 
     bool ok = false;
@@ -106,7 +120,31 @@ void test_preferences() {
     assert(p2.wake_hotkey == "Ctrl+Alt+K");
     assert(p2.daily_goal == 12000);
     assert(p2.excluded_apps.size() == 1 && p2.excluded_apps[0] == "keepass.exe");
+    assert(p2.typing_test_enabled == false);
+    assert(p2.typing_test_count_stats == true);
+    assert(p2.ergo_insights_enabled == false);
+    assert(p2.ergo_guard_enabled == false);
+    assert(p2.smart_alerts_enabled == false);
+    assert(p2.sound_alerts_enabled == false);
+    assert(p2.app_exclusions_enabled == false);
+    assert(p2.pause_in_excluded_apps == true);
+    assert(p2.idle_detection_enabled == false);
+    assert(p2.idle_timeout_sec == 180);
+    assert(p2.jalali_calendar == true);
+    assert(p2.auto_check_updates == false);
+    assert(p2.last_update_check == 1764244800LL);
+
+    // Ensure all 10 locales survive roundtrip
+    for (const char* loc : {"en", "fa", "system", "zh-CN", "zh-TW", "ja", "ko", "fr", "de", "es"}) {
+        tc::Preferences lp;
+        lp.language = loc;
+        assert(lp.save_file(tmp.string()));
+        auto loaded = tc::Preferences::load_file(tmp.string(), &ok);
+        assert(ok && loaded.language == loc);
+    }
     fs::remove(tmp);
+    assert(std::string(TC_VERSION_STR) == "1.1.0");
+    assert(TC_VERSION_NUM == 10100);
     std::cout << "[PASS] test_preferences\n";
 }
 
@@ -157,8 +195,20 @@ void test_db_and_engine() {
     assert(snap.get("shortcuts").arr.size() == 1);
     assert(snap.get("report").is_object());
     assert(snap.get("streak_days").as_int() == 1);
+    assert(snap.get("today_active_sec").as_int() >= 1);
+    assert(snap.get("focus_score").as_int() >= 0 && snap.get("focus_score").as_int() <= 100);
+    assert(snap.get("peak_hour").as_int() == 12);
+    assert(snap.get("ergo_10m_ops").as_int() >= 15);
 
-    // CSV & JSON export
+    // Meta & typing tests persistence
+    assert(db.set_meta("goal_notified_day", q.report_day));
+    assert(db.get_meta("goal_notified_day") == q.report_day);
+    assert(db.record_typing_test(q.now_ms / 1000, 30, 84.5, 430.0, 97.2, 2, 215, "en"));
+    tc::JsonValue snap2 = eng.snapshot(q);
+    assert(std::abs(snap2.get("typing_test_best_wpm").as_double() - 84.5) < 0.01);
+    assert(snap2.get("typing_tests").arr.size() == 1);
+
+    // CSV & JSON export (includes active_seconds column)
     assert(db.export_csv(csv_path.string(), 0, &err));
     assert(fs::exists(csv_path) && fs::file_size(csv_path) > 40);
     assert(db.export_json(json_path.string(), 0, &err));
@@ -196,6 +246,8 @@ void test_db_and_engine() {
     assert(demo.get("demo").as_bool() == true);
     assert(demo.get("history_days").arr.size() == 180);
     assert(demo.get("apps_today").arr.size() == 5);
+    assert(demo.get("typing_test_best_wpm").as_double() > 0.0);
+    assert(demo.get("focus_score").as_int() > 0);
 
     db.close();
     fs::remove_all(dir);
