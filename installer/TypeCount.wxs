@@ -27,7 +27,7 @@
     <util:CloseApplication Id="CloseRunningTypeCount"
                            Target="TypeCount.exe"
                            CloseMessage="yes"
-                           TerminateProcess="yes"
+                           TerminateProcess="0"
                            Timeout="3"
                            RebootPrompt="no" />
 
@@ -54,7 +54,7 @@
                   Value="[SAVED_INSTALLFOLDER]"
                   Condition="SAVED_INSTALLFOLDER" />
 
-    <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="*">
+    <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="B7E9120A-84D2-4F55-91B3-04AC8E72A311">
       <File Id="TypeCountExe" Source="releases\TypeCount.exe" />
       <RemoveFolder Id="CleanInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
       <RemoveFolder Id="CleanProgramsDir" Directory="ProgramsDir" On="uninstall" />
