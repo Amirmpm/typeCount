@@ -5,16 +5,18 @@
   const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
   if(onWindows||onLinux||window.clickpulsePlatform==='macos'){
     document.querySelector('header').addEventListener('mousedown',event=>{
-      if(event.button!==0||event.target.closest('button,select,input,a,[role="combobox"]'))return;
+      if(event.button!==0||event.target.closest('button,select,input,a,[role="combobox"],.window-controls'))return;
       event.preventDefault();send('drag');
     });
   }
   if(onWindows||onLinux){
     const header=document.querySelector('header');
     header.addEventListener('dblclick',event=>{
-      if(event.button===0&&!event.target.closest('button,select,input,a,[role="combobox"]'))send('maximize');
+      if(event.button===0&&!event.target.closest('button,select,input,a,[role="combobox"],.window-controls'))send('maximize');
     });
-    for(const [id,action] of [['window-minimize','minimize'],['window-maximize','maximize'],['window-close','close']])$(id).addEventListener('click',()=>send(action));
+    for(const [id,action] of [['window-minimize','minimize'],['window-maximize','maximize'],['window-close','close']]) {
+      $(id).addEventListener('click',event=>{event.stopPropagation();send(action);});
+    }
     $('close-action-row').hidden=false;
     $('close-action-select').addEventListener('change',event=>send('close_preference',{close_action:event.target.value}));
     const overlay=$('close-overlay'),remember=$('close-remember');

@@ -527,7 +527,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "en": {
     "star.title": "Enjoying TypeCount?",
@@ -1057,7 +1060,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "zh-TW": {
     "star.title": "喜歡 TypeCount 嗎？",
@@ -1587,7 +1593,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "ja": {
     "star.title": "TypeCount は役に立っていますか？",
@@ -2117,7 +2126,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "ko": {
     "star.title": "TypeCount가 유용한가요?",
@@ -2647,7 +2659,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "fr": {
     "star.title": "TypeCount vous plaît ?",
@@ -3177,7 +3192,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "de": {
     "star.title": "Gefällt dir TypeCount?",
@@ -3707,7 +3725,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "es": {
     "star.title": "¿Te gusta TypeCount?",
@@ -4237,7 +4258,10 @@
     "export.failed": "Export failed. Try another destination.",
     "dpi.title": "Monitor pixel density (PPI)",
     "dpi.desc": "Used to estimate physical mouse travel distance in meters.",
-    "shortcut.modifiers": "Modifiers"
+    "shortcut.modifiers": "Modifiers",
+    "break.min_20": "20 min",
+    "break.min_45": "45 min",
+    "break.min_60": "60 min"
   },
   "fa": {
     "star.title": "از TypeCount راضی هستید؟",
@@ -4767,6 +4791,9 @@
     "export.failed": "ذخیره خروجی ناموفق بود.",
     "dpi.title": "تراکم پیکسلی نمایشگر (PPI)",
     "dpi.desc": "برای تخمین مسافت حرکت ماوس بر حسب متر استفاده می‌شود.",
-    "shortcut.modifiers": "کلیدهای ترکیبی"
+    "shortcut.modifiers": "کلیدهای ترکیبی",
+    "break.min_20": "۲۰ دقیقه",
+    "break.min_45": "۴۵ دقیقه",
+    "break.min_60": "۶۰ دقیقه"
   }
 }

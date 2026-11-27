@@ -127,9 +127,11 @@ inline bool set_autostart_enabled(bool enabled) {
 inline std::string foreground_process_name() {
     static HWND cached_hwnd = nullptr;
     static std::string cached_name;
+    static int64_t cached_ms = 0;
     HWND fg = GetForegroundWindow();
     if (!fg) return {};
-    if (fg == cached_hwnd && !cached_name.empty()) return cached_name;
+    int64_t now = now_utc_ms();
+    if (fg == cached_hwnd && !cached_name.empty() && (now - cached_ms) < 5000) return cached_name;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(fg, &pid);
@@ -150,6 +152,7 @@ inline std::string foreground_process_name() {
     if (!result.empty()) {
         cached_hwnd = fg;
         cached_name = result;
+        cached_ms = now;
     }
     return result;
 }
@@ -309,6 +312,82 @@ inline UINT window_dpi(HWND hwnd) {
         }
     }
     return 96;
+}
+
+inline int timezone_offset_sec_for(const std::string& tz_pref) {
+    if (tz_pref.empty() || tz_pref == "system") return current_tz_offset_sec();
+    if (tz_pref == "UTC") return 0;
+
+    struct WinTzEntry {
+        const char* iana;
+        const wchar_t* win_name;
+        int fallback_sec;
+    };
+    static const WinTzEntry kTable[] = {
+        {"Asia/Tehran",        L"Iran Standard Time",             12600},
+        {"Europe/Amsterdam",   L"W. Europe Standard Time",         3600},
+        {"Europe/London",      L"GMT Standard Time",                  0},
+        {"Europe/Berlin",      L"W. Europe Standard Time",         3600},
+        {"Europe/Paris",       L"Romance Standard Time",           3600},
+        {"Europe/Moscow",      L"Russian Standard Time",          10800},
+        {"America/New_York",   L"Eastern Standard Time",         -18000},
+        {"America/Chicago",    L"Central Standard Time",         -21600},
+        {"America/Denver",     L"Mountain Standard Time",        -25200},
+        {"America/Los_Angeles",L"Pacific Standard Time",         -28800},
+        {"America/Toronto",    L"Eastern Standard Time",         -18000},
+        {"America/Sao_Paulo",  L"E. South America Standard Time",-10800},
+        {"Asia/Dubai",         L"Arabian Standard Time",          14400},
+        {"Asia/Istanbul",      L"Turkey Standard Time",           10800},
+        {"Asia/Riyadh",        L"Arab Standard Time",             10800},
+        {"Asia/Kolkata",       L"India Standard Time",            19800},
+        {"Asia/Bangkok",       L"SE Asia Standard Time",          25200},
+        {"Asia/Singapore",     L"Singapore Standard Time",        28800},
+        {"Asia/Shanghai",      L"China Standard Time",            28800},
+        {"Asia/Tokyo",         L"Tokyo Standard Time",            32400},
+        {"Asia/Seoul",         L"Korea Standard Time",            32400},
+        {"Australia/Sydney",   L"AUS Eastern Standard Time",      36000},
+        {"Pacific/Auckland",   L"New Zealand Standard Time",      43200},
+    };
+
+    for (const auto& e : kTable) {
+        if (tz_pref != e.iana) continue;
+        std::wstring sub = std::wstring(L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones\\") + e.win_name;
+        HKEY k = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, sub.c_str(), 0, KEY_READ, &k) == ERROR_SUCCESS) {
+            struct REG_TZI_FORMAT {
+                LONG Bias;
+                LONG StandardBias;
+                LONG DaylightBias;
+                SYSTEMTIME StandardDate;
+                SYSTEMTIME DaylightDate;
+            } reg_tzi{};
+            DWORD sz = sizeof(reg_tzi);
+            if (RegQueryValueExW(k, L"TZI", nullptr, nullptr, reinterpret_cast<BYTE*>(&reg_tzi), &sz) == ERROR_SUCCESS &&
+                sz == sizeof(reg_tzi)) {
+                TIME_ZONE_INFORMATION tzi{};
+                tzi.Bias = reg_tzi.Bias;
+                tzi.StandardBias = reg_tzi.StandardBias;
+                tzi.DaylightBias = reg_tzi.DaylightBias;
+                tzi.StandardDate = reg_tzi.StandardDate;
+                tzi.DaylightDate = reg_tzi.DaylightDate;
+                SYSTEMTIME utc_now{}, tz_local{};
+                GetSystemTime(&utc_now);
+                if (SystemTimeToTzSpecificLocalTime(&tzi, &utc_now, &tz_local)) {
+                    FILETIME ft_u{}, ft_l{};
+                    SystemTimeToFileTime(&utc_now, &ft_u);
+                    SystemTimeToFileTime(&tz_local, &ft_l);
+                    ULARGE_INTEGER u{}, l{};
+                    u.LowPart = ft_u.dwLowDateTime; u.HighPart = ft_u.dwHighDateTime;
+                    l.LowPart = ft_l.dwLowDateTime; l.HighPart = ft_l.dwHighDateTime;
+                    RegCloseKey(k);
+                    return static_cast<int>((static_cast<int64_t>(l.QuadPart) - static_cast<int64_t>(u.QuadPart)) / 10000000LL);
+                }
+            }
+            RegCloseKey(k);
+        }
+        return e.fallback_sec;
+    }
+    return current_tz_offset_sec();
 }
 
 inline std::vector<std::string> system_timezones_list() {

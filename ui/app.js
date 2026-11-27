@@ -174,6 +174,8 @@ window.setInterfaceLanguage=(locale,preference)=>{
   if(I.locale===locale)return;
   I.setLocale(locale);I.apply(document);window.syncPresentationLabels?.();updateHeading();renderDataOperation();
   window.renderTodayPeriod?.();
+  if(data){window.renderTypeCountOverview?.(data);window.renderTypeCountApps?.(data);}
+  window.renderTypeCountSettings?.();
   renderTimeZoneOptions();Dropdowns.syncAll();
   calendarLayout='';historySignature='';
   sportView?.render();
@@ -903,7 +905,7 @@ function renderKeyboardTreemap(view){
     cell.title=detail;cell.setAttribute('aria-label',detail);
   }
 }
-send('ready');
+// Ready signal is sent after presentation.js and typecount-ext.js finish registering handlers.
 
 $('takeover').addEventListener('click',()=>send('takeover'));
 $('autostart').addEventListener('change',event=>{if(data?.auto_start_available&&event.target.checked!==!!data.auto_start)send('autostart');});

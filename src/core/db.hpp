@@ -105,6 +105,7 @@ public:
 
     JsonValue build_snapshot(const SnapshotQuery& q);
     JsonValue query_history_hours(const std::string& start_day, const std::string& end_day, int tz_offset_sec);
+    JsonValue query_history_hours_demo(const std::string& start_day, const std::string& end_day) const;
     JsonValue build_demo_snapshot(const SnapshotQuery& q) const;
 
     bool export_csv(const std::string& out_path, int tz_offset_sec, std::string* err_out = nullptr);
