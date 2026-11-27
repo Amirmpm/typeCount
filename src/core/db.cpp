@@ -494,17 +494,20 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
         windows.push(std::move(w4));
     }
 
-    // Last 24 hourly buckets (for Overview 24h chart)
-    int64_t cur_hour_start_sec = (now_sec / 3600) * 3600;
+    // Last 24 hourly buckets aligned to local clock hours (works cleanly for +03:30 / +05:30 too)
+    int64_t local_now_sec = now_sec + q.tz_offset_sec;
+    int64_t cur_hour_start_sec = (local_now_sec / 3600) * 3600 - q.tz_offset_sec;
     JsonValue hourly = JsonValue::array();
     std::map<int64_t, std::pair<int64_t, int64_t>> rolling_hour_map;
     if (db_) {
         int64_t min_from = (cur_hour_start_sec - 23 * 3600) / 60;
         sqlite3_stmt* st = nullptr;
         if (sqlite3_prepare_v2(db_,
-            "SELECT ((minute_ts * 60) / 3600) * 3600 AS h_ts, SUM(keyboard), SUM(mouse) "
+            "SELECT (((minute_ts * 60 + ?) / 3600) * 3600 - ?) AS h_ts, SUM(keyboard), SUM(mouse) "
             "FROM minute_stats WHERE minute_ts >= ? GROUP BY h_ts;", -1, &st, nullptr) == SQLITE_OK) {
-            sqlite3_bind_int64(st, 1, min_from);
+            sqlite3_bind_int(st, 1, q.tz_offset_sec);
+            sqlite3_bind_int(st, 2, q.tz_offset_sec);
+            sqlite3_bind_int64(st, 3, min_from);
             while (sqlite3_step(st) == SQLITE_ROW) {
                 rolling_hour_map[sqlite3_column_int64(st, 0)] = {
                     sqlite3_column_int64(st, 1), sqlite3_column_int64(st, 2)
@@ -897,6 +900,27 @@ JsonValue Db::query_history_hours(const std::string& start_day, const std::strin
     return rows;
 }
 
+JsonValue Db::query_history_hours_demo(const std::string& start_day, const std::string& end_day) const {
+    JsonValue rows = JsonValue::array();
+    if (start_day.empty() || end_day.empty() || start_day > end_day) return rows;
+    std::string cur = start_day;
+    int guard = 0;
+    while (cur <= end_day && guard++ < 400) {
+        for (int hr = 8; hr <= 21; ++hr) {
+            int64_t k = ((guard * 19 + hr * 37) % 140) * 14 + 40;
+            int64_t m = ((guard * 11 + hr * 23) % 70) * 8 + 15;
+            JsonValue row = JsonValue::array();
+            row.push(cur);
+            row.push(hr);
+            row.push(k);
+            row.push(m);
+            rows.push(std::move(row));
+        }
+        cur = shift_day(cur, 1);
+    }
+    return rows;
+}
+
 JsonValue Db::build_demo_snapshot(const SnapshotQuery& q) const {
     int64_t now_sec = q.now_ms / 1000;
     std::string today = format_day(now_sec, q.tz_offset_sec);
@@ -1284,8 +1308,10 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
         if (sqlite3_prepare_v2(src, "SELECT day, code, count FROM key_daily;", -1, &sst, nullptr) == SQLITE_OK &&
             sqlite3_prepare_v2(db_, "INSERT INTO key_daily(day,code,count) VALUES(?,?,?) ON CONFLICT(day,code) DO UPDATE SET count=MAX(count, excluded.count);", -1, &ins, nullptr) == SQLITE_OK) {
             while (sqlite3_step(sst) == SQLITE_ROW) {
+                const char* d = reinterpret_cast<const char*>(sqlite3_column_text(sst, 0));
+                if (!d) continue;
                 sqlite3_reset(ins);
-                sqlite3_bind_text(ins, 1, reinterpret_cast<const char*>(sqlite3_column_text(sst, 0)), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(ins, 1, d, -1, SQLITE_TRANSIENT);
                 sqlite3_bind_int64(ins, 2, sqlite3_column_int64(sst, 1));
                 sqlite3_bind_int64(ins, 3, sqlite3_column_int64(sst, 2));
                 sqlite3_step(ins);
@@ -1301,8 +1327,10 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
         if (sqlite3_prepare_v2(src, "SELECT day, button, count FROM mouse_btn_daily;", -1, &sst, nullptr) == SQLITE_OK &&
             sqlite3_prepare_v2(db_, "INSERT INTO mouse_btn_daily(day,button,count) VALUES(?,?,?) ON CONFLICT(day,button) DO UPDATE SET count=MAX(count, excluded.count);", -1, &ins, nullptr) == SQLITE_OK) {
             while (sqlite3_step(sst) == SQLITE_ROW) {
+                const char* d = reinterpret_cast<const char*>(sqlite3_column_text(sst, 0));
+                if (!d) continue;
                 sqlite3_reset(ins);
-                sqlite3_bind_text(ins, 1, reinterpret_cast<const char*>(sqlite3_column_text(sst, 0)), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(ins, 1, d, -1, SQLITE_TRANSIENT);
                 sqlite3_bind_int(ins, 2, sqlite3_column_int(sst, 1));
                 sqlite3_bind_int64(ins, 3, sqlite3_column_int64(sst, 2));
                 sqlite3_step(ins);
@@ -1318,8 +1346,10 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
         if (sqlite3_prepare_v2(src, "SELECT day, modifiers, key, count FROM shortcut_daily;", -1, &sst, nullptr) == SQLITE_OK &&
             sqlite3_prepare_v2(db_, "INSERT INTO shortcut_daily(day,modifiers,key,count) VALUES(?,?,?,?) ON CONFLICT(day,modifiers,key) DO UPDATE SET count=MAX(count, excluded.count);", -1, &ins, nullptr) == SQLITE_OK) {
             while (sqlite3_step(sst) == SQLITE_ROW) {
+                const char* d = reinterpret_cast<const char*>(sqlite3_column_text(sst, 0));
+                if (!d) continue;
                 sqlite3_reset(ins);
-                sqlite3_bind_text(ins, 1, reinterpret_cast<const char*>(sqlite3_column_text(sst, 0)), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(ins, 1, d, -1, SQLITE_TRANSIENT);
                 sqlite3_bind_int(ins, 2, sqlite3_column_int(sst, 1));
                 sqlite3_bind_int64(ins, 3, sqlite3_column_int64(sst, 2));
                 sqlite3_bind_int64(ins, 4, sqlite3_column_int64(sst, 3));
@@ -1340,9 +1370,12 @@ ImportReport Db::import_database(const std::string& source_path, const std::stri
                 "keyboard=MAX(keyboard,excluded.keyboard), mouse=MAX(mouse,excluded.mouse), "
                 "scroll=MAX(scroll,excluded.scroll), active_sec=MAX(active_sec,excluded.active_sec);", -1, &ins, nullptr) == SQLITE_OK) {
             while (sqlite3_step(sst) == SQLITE_ROW) {
+                const char* d = reinterpret_cast<const char*>(sqlite3_column_text(sst, 0));
+                const char* app = reinterpret_cast<const char*>(sqlite3_column_text(sst, 1));
+                if (!d || !app) continue;
                 sqlite3_reset(ins);
-                sqlite3_bind_text(ins, 1, reinterpret_cast<const char*>(sqlite3_column_text(sst, 0)), -1, SQLITE_TRANSIENT);
-                sqlite3_bind_text(ins, 2, reinterpret_cast<const char*>(sqlite3_column_text(sst, 1)), -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(ins, 1, d, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(ins, 2, app, -1, SQLITE_TRANSIENT);
                 sqlite3_bind_int64(ins, 3, sqlite3_column_int64(sst, 2));
                 sqlite3_bind_int64(ins, 4, sqlite3_column_int64(sst, 3));
                 sqlite3_bind_int64(ins, 5, sqlite3_column_int64(sst, 4));

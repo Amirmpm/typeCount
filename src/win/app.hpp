@@ -10,8 +10,10 @@
 
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -20,6 +22,7 @@ namespace win {
 
 constexpr UINT WM_TRAYICON = WM_APP + 1;
 constexpr UINT WM_APP_ACTIVATE = WM_APP + 2;
+constexpr UINT WM_APP_IPC = WM_APP + 3;
 
 constexpr UINT_PTR TIMER_FLUSH = 101;
 constexpr UINT_PTR TIMER_SPORT = 102;
@@ -178,6 +181,11 @@ private:
     // Saved normal window rect when switching to Mini mode
     RECT normal_rect_{100, 100, 1260, 940};
     bool has_normal_rect_ = false;
+    bool full_maximized_ = false;
+    bool prev_compact_ = false;
+
+    std::mutex ipc_mu_;
+    std::deque<std::string> ipc_queue_;
 
     void shutdown() {
         KillTimer(capture_hwnd_, TIMER_FLUSH);
@@ -195,6 +203,7 @@ private:
             capture_hwnd_ = nullptr;
         }
         engine_.flush();
+        save_prefs();
         db_.close();
         if (app_icon_) {
             DestroyIcon(app_icon_);
@@ -231,6 +240,35 @@ private:
         return true;
     }
 
+    void update_dwm_corners() {
+        if (!ui_hwnd_) return;
+        bool zoomed = (IsZoomed(ui_hwnd_) != FALSE) && !prefs_.compact;
+        DWORD pref = zoomed ? 1 /* DWMWCP_DONOTROUND */ : 2 /* DWMWCP_ROUND */;
+        HRESULT hr = DwmSetWindowAttribute(ui_hwnd_, static_cast<DWMWINDOWATTRIBUTE>(33), &pref, sizeof(pref));
+        if (prefs_.compact && FAILED(hr)) {
+            RECT cr{};
+            GetClientRect(ui_hwnd_, &cr);
+            UINT dpi = window_dpi(ui_hwnd_);
+            int diam = MulDiv(24, static_cast<int>(dpi), 96);
+            HRGN rgn = CreateRoundRectRgn(0, 0, cr.right + 1, cr.bottom + 1, diam, diam);
+            if (rgn && !SetWindowRgn(ui_hwnd_, rgn, TRUE)) {
+                DeleteObject(rgn);
+            }
+        } else {
+            SetWindowRgn(ui_hwnd_, nullptr, TRUE);
+        }
+    }
+
+    void toggle_maximize() {
+        if (!ui_hwnd_ || prefs_.compact) return;
+        bool next_max = (IsZoomed(ui_hwnd_) == FALSE);
+        ShowWindow(ui_hwnd_, next_max ? SW_MAXIMIZE : SW_RESTORE);
+        full_maximized_ = (IsZoomed(ui_hwnd_) != FALSE);
+        update_dwm_corners();
+        webview_.resize_to_parent();
+        send_view_state();
+    }
+
     void ensure_ui_window() {
         if (ui_hwnd_) return;
 
@@ -245,18 +283,37 @@ private:
         wc.lpszClassName = L"TypeCountMainWindow";
         RegisterClassExW(&wc);
 
-        int x = prefs_.window_x >= 0 ? prefs_.window_x : CW_USEDEFAULT;
-        int y = prefs_.window_y >= 0 ? prefs_.window_y : CW_USEDEFAULT;
-        int w = prefs_.window_width;
-        int h = prefs_.window_height;
+        POINT ref_pt{std::max(0, prefs_.window_x), std::max(0, prefs_.window_y)};
+        HMONITOR mon = MonitorFromPoint(ref_pt, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoW(mon, &mi);
+        int work_w = std::max(800, static_cast<int>(mi.rcWork.right - mi.rcWork.left));
+        int work_h = std::max(560, static_cast<int>(mi.rcWork.bottom - mi.rcWork.top));
 
-        if (prefs_.compact) {
-            w = 320;
-            h = 208;
+        // Estimate scale for initial window sizing before HWND exists
+        HDC hdc = GetDC(nullptr);
+        int init_dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96;
+        if (hdc) ReleaseDC(nullptr, hdc);
+        if (init_dpi <= 0) init_dpi = 96;
+
+        int w = prefs_.compact
+            ? MulDiv(320, init_dpi, 96)
+            : std::min(work_w - 32, std::max(MulDiv(760, init_dpi, 96), MulDiv(prefs_.window_width, init_dpi, 96)));
+        int h = prefs_.compact
+            ? MulDiv(208, init_dpi, 96)
+            : std::min(work_h - 32, std::max(MulDiv(560, init_dpi, 96), MulDiv(prefs_.window_height, init_dpi, 96)));
+
+        int x = prefs_.window_x;
+        int y = prefs_.window_y;
+        if (x < mi.rcWork.left || x + 120 > mi.rcWork.right || y < mi.rcWork.top || y + 80 > mi.rcWork.bottom) {
+            x = mi.rcWork.left + std::max(0, (work_w - w) / 2);
+            y = mi.rcWork.top + std::max(0, (work_h - h) / 2);
         }
 
+        DWORD ex_style = prefs_.compact ? WS_EX_TOOLWINDOW : WS_EX_APPWINDOW;
         ui_hwnd_ = CreateWindowExW(
-            WS_EX_APPWINDOW,
+            ex_style,
             L"TypeCountMainWindow",
             L"TypeCount",
             WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU,
@@ -264,19 +321,8 @@ private:
             nullptr, nullptr, hinst_, this);
         if (!ui_hwnd_) return;
 
-        // Win11 rounded corners
-        DWORD round_pref = 2; // DWMWCP_ROUND
-        DwmSetWindowAttribute(ui_hwnd_, static_cast<DWMWINDOWATTRIBUTE>(33), &round_pref, sizeof(round_pref));
-
-        if (x == CW_USEDEFAULT) {
-            RECT rc{};
-            GetWindowRect(ui_hwnd_, &rc);
-            int sw = GetSystemMetrics(SM_CXSCREEN);
-            int sh = GetSystemMetrics(SM_CYSCREEN);
-            int rw = rc.right - rc.left;
-            int rh = rc.bottom - rc.top;
-            SetWindowPos(ui_hwnd_, nullptr, (sw - rw) / 2, (sh - rh) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-        }
+        prev_compact_ = prefs_.compact;
+        update_dwm_corners();
 
         std::wstring wv_dir = data_dir_ + L"\\WebView2";
         ensure_dir_wide(wv_dir);
@@ -287,7 +333,7 @@ private:
             wv_dir,
             init_loc,
             prefs_.theme,
-            [this](const std::string& json_str) { handle_ipc_message(json_str); },
+            [this](const std::string& json_str) { enqueue_ipc_message(json_str); },
             [this]() { on_webview_ready(); },
             [this]() {
                 MessageBoxW(
@@ -305,17 +351,22 @@ private:
         ensure_ui_window();
         if (!ui_hwnd_) return;
 
-        apply_window_geometry_for_mode();
-
         ui_visible_ = true;
         if (IsIconic(ui_hwnd_)) ShowWindow(ui_hwnd_, SW_RESTORE);
-        ShowWindow(ui_hwnd_, SW_SHOW);
+        apply_window_geometry_for_mode();
+
+        if (!prefs_.compact && full_maximized_) {
+            ShowWindow(ui_hwnd_, SW_MAXIMIZE);
+        } else {
+            ShowWindow(ui_hwnd_, SW_SHOW);
+        }
         SetWindowPos(
             ui_hwnd_,
             (prefs_.compact && prefs_.pinned) ? HWND_TOPMOST : HWND_NOTOPMOST,
             0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         SetForegroundWindow(ui_hwnd_);
+        update_dwm_corners();
         webview_.set_visible(true);
         webview_.resize_to_parent();
         webview_.focus();
@@ -352,23 +403,59 @@ private:
     void apply_window_geometry_for_mode() {
         if (!ui_hwnd_) return;
         UINT dpi = window_dpi(ui_hwnd_);
+        LONG_PTR ex = GetWindowLongPtrW(ui_hwnd_, GWL_EXSTYLE);
         if (prefs_.compact) {
-            if (!IsZoomed(ui_hwnd_)) {
+            if (!prev_compact_) {
+                full_maximized_ = (IsZoomed(ui_hwnd_) != FALSE);
+                if (full_maximized_) ShowWindow(ui_hwnd_, SW_RESTORE);
                 GetWindowRect(ui_hwnd_, &normal_rect_);
                 has_normal_rect_ = true;
             }
+            SetWindowLongPtrW(ui_hwnd_, GWL_EXSTYLE, (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW);
             int cw = MulDiv(320, static_cast<int>(dpi), 96);
             int ch = MulDiv(208, static_cast<int>(dpi), 96);
+            UINT flags = SWP_NOACTIVATE | SWP_FRAMECHANGED;
+            int mx = 0, my = 0;
+            if (!prev_compact_) {
+                HMONITOR mon = MonitorFromWindow(ui_hwnd_, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi{};
+                mi.cbSize = sizeof(mi);
+                GetMonitorInfoW(mon, &mi);
+                mx = mi.rcWork.right - cw - MulDiv(24, static_cast<int>(dpi), 96);
+                my = mi.rcWork.bottom - ch - MulDiv(24, static_cast<int>(dpi), 96);
+            } else {
+                flags |= SWP_NOMOVE;
+            }
             SetWindowPos(
                 ui_hwnd_,
                 prefs_.pinned ? HWND_TOPMOST : HWND_NOTOPMOST,
-                0, 0, cw, ch,
-                SWP_NOMOVE | SWP_NOACTIVATE);
+                mx, my, cw, ch,
+                flags);
         } else {
-            int rw = has_normal_rect_ ? (normal_rect_.right - normal_rect_.left) : MulDiv(prefs_.window_width, static_cast<int>(dpi), 96);
-            int rh = has_normal_rect_ ? (normal_rect_.bottom - normal_rect_.top) : MulDiv(prefs_.window_height, static_cast<int>(dpi), 96);
-            SetWindowPos(ui_hwnd_, HWND_NOTOPMOST, 0, 0, rw, rh, SWP_NOMOVE | SWP_NOACTIVATE);
+            SetWindowLongPtrW(ui_hwnd_, GWL_EXSTYLE, (ex & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW);
+            if (prev_compact_) {
+                HMONITOR mon = MonitorFromWindow(ui_hwnd_, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi{};
+                mi.cbSize = sizeof(mi);
+                GetMonitorInfoW(mon, &mi);
+                int work_w = std::max(800, static_cast<int>(mi.rcWork.right - mi.rcWork.left));
+                int work_h = std::max(560, static_cast<int>(mi.rcWork.bottom - mi.rcWork.top));
+                int rw = has_normal_rect_
+                    ? (normal_rect_.right - normal_rect_.left)
+                    : std::min(work_w - 32, MulDiv(prefs_.window_width, static_cast<int>(dpi), 96));
+                int rh = has_normal_rect_
+                    ? (normal_rect_.bottom - normal_rect_.top)
+                    : std::min(work_h - 32, MulDiv(prefs_.window_height, static_cast<int>(dpi), 96));
+                int rx = has_normal_rect_ ? normal_rect_.left : (mi.rcWork.left + std::max(0, (work_w - rw) / 2));
+                int ry = has_normal_rect_ ? normal_rect_.top : (mi.rcWork.top + std::max(0, (work_h - rh) / 2));
+                SetWindowPos(ui_hwnd_, HWND_NOTOPMOST, rx, ry, rw, rh, SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                if (full_maximized_) ShowWindow(ui_hwnd_, SW_MAXIMIZE);
+            } else {
+                SetWindowPos(ui_hwnd_, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
         }
+        prev_compact_ = prefs_.compact;
+        update_dwm_corners();
         webview_.resize_to_parent();
     }
 
@@ -608,7 +695,7 @@ private:
     SnapshotQuery make_query() {
         SnapshotQuery q;
         q.now_ms = now_utc_ms();
-        q.tz_offset_sec = current_tz_offset_sec();
+        q.tz_offset_sec = timezone_offset_sec_for(prefs_.timezone);
         q.include_shortcuts = true;
         q.include_apps = true;
         q.demo = demo_mode_;
@@ -639,11 +726,51 @@ private:
         }
     }
 
+    void update_tray_tooltip() {
+        if (!tray_added_ || !capture_hwnd_) return;
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = capture_hwnd_;
+        nid.uID = 1;
+        nid.uFlags = NIF_TIP;
+        bool fa = (prefs_.language == "fa");
+        std::wstring tip;
+        if (paused_) {
+            tip = fa ? L"TypeCount · متوقف شده" : L"TypeCount · Paused";
+        } else {
+            tip = fa ? L"TypeCount · در حال ثبت (کلیک چپ برای بازکردن)" : L"TypeCount · Recording (left-click to open)";
+        }
+        wcsncpy(nid.szTip, tip.c_str(), 127);
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+
     void toggle_pause() {
         paused_ = !paused_;
         if (paused_) key_tracker_.reset();
+        update_tray_tooltip();
         if (webview_.is_ready()) {
             webview_.eval_js(std::string("window.receivePaused(") + (paused_ ? "true" : "false") + ");");
+        }
+    }
+
+    void enqueue_ipc_message(const std::string& raw) {
+        {
+            std::lock_guard<std::mutex> lk(ipc_mu_);
+            ipc_queue_.push_back(raw);
+        }
+        if (capture_hwnd_) PostMessageW(capture_hwnd_, WM_APP_IPC, 0, 0);
+    }
+
+    void drain_ipc_queue() {
+        for (;;) {
+            std::string raw;
+            {
+                std::lock_guard<std::mutex> lk(ipc_mu_);
+                if (ipc_queue_.empty()) break;
+                raw = std::move(ipc_queue_.front());
+                ipc_queue_.pop_front();
+            }
+            handle_ipc_message(raw);
         }
     }
 
@@ -695,17 +822,16 @@ private:
         } else if (action == "pause") {
             toggle_pause();
         } else if (action == "drag") {
-            if (ui_hwnd_) {
+            if (ui_hwnd_ && (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                POINT pt{};
+                GetCursorPos(&pt);
                 ReleaseCapture();
-                SendMessageW(ui_hwnd_, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+                SendMessageW(ui_hwnd_, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y));
             }
         } else if (action == "minimize") {
             if (ui_hwnd_) ShowWindow(ui_hwnd_, SW_MINIMIZE);
         } else if (action == "maximize") {
-            if (ui_hwnd_) {
-                ShowWindow(ui_hwnd_, IsZoomed(ui_hwnd_) ? SW_RESTORE : SW_MAXIMIZE);
-                send_view_state();
-            }
+            toggle_maximize();
         } else if (action == "close") {
             if (prefs_.close_action == "hide") hide_main_window(false);
             else if (prefs_.close_action == "stealth") hide_main_window(true);
@@ -752,6 +878,7 @@ private:
         } else if (action == "language") {
             prefs_.language = msg.get("language").as_string_or("en");
             save_prefs();
+            update_tray_tooltip();
             send_view_state();
             send_snapshot();
         } else if (action == "theme") {
@@ -850,7 +977,10 @@ private:
             int64_t req_id = msg.get("id").as_int(0);
             std::string st = msg.get("start").as_string();
             std::string en = msg.get("end").as_string();
-            JsonValue rows = db_.query_history_hours(st, en, current_tz_offset_sec());
+            int tz = timezone_offset_sec_for(prefs_.timezone);
+            JsonValue rows = demo_mode_
+                ? db_.query_history_hours_demo(st, en)
+                : db_.query_history_hours(st, en, tz);
             webview_.eval_js("window.receiveHistoryHours(" + std::to_string(req_id) + "," + rows.dump() + ");");
         } else if (action == "autostart") {
             bool cur = is_autostart_enabled();
@@ -903,24 +1033,24 @@ private:
                 }
             }
         } else if (action == "export_csv") {
-            std::string today = Db::format_day(now_utc_ms() / 1000, current_tz_offset_sec());
+            std::string today = Db::format_day(now_utc_ms() / 1000, timezone_offset_sec_for(prefs_.timezone));
             std::wstring def = to_wide("TypeCount-" + today + ".csv");
             std::wstring out = save_file_dialog(ui_hwnd_, L"CSV Files (*.csv)\0*.csv\0", L"csv", def);
             if (!out.empty()) {
                 engine_.flush();
-                if (db_.export_csv(to_utf8(out), current_tz_offset_sec())) {
+                if (db_.export_csv(to_utf8(out), timezone_offset_sec_for(prefs_.timezone))) {
                     toast_key("export.saved", to_utf8(out));
                 } else {
                     toast_key("export.failed");
                 }
             }
         } else if (action == "export_json") {
-            std::string today = Db::format_day(now_utc_ms() / 1000, current_tz_offset_sec());
+            std::string today = Db::format_day(now_utc_ms() / 1000, timezone_offset_sec_for(prefs_.timezone));
             std::wstring def = to_wide("TypeCount-" + today + ".json");
             std::wstring out = save_file_dialog(ui_hwnd_, L"JSON Files (*.json)\0*.json\0", L"json", def);
             if (!out.empty()) {
                 engine_.flush();
-                if (db_.export_json(to_utf8(out), current_tz_offset_sec())) {
+                if (db_.export_json(to_utf8(out), timezone_offset_sec_for(prefs_.timezone))) {
                     toast_key("export.saved", to_utf8(out));
                 } else {
                     toast_key("export.failed");
@@ -1031,6 +1161,9 @@ private:
             case WM_APP_ACTIVATE:
                 show_main_window();
                 return 0;
+            case WM_APP_IPC:
+                drain_ipc_queue();
+                return 0;
             case WM_TRAYICON:
                 if (LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_LBUTTONDBLCLK) {
                     show_main_window();
@@ -1111,6 +1244,15 @@ private:
             case WM_GETMINMAXINFO: {
                 auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
                 UINT dpi = window_dpi(hwnd);
+                HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi{};
+                mi.cbSize = sizeof(mi);
+                if (GetMonitorInfoW(mon, &mi)) {
+                    mmi->ptMaxPosition.x = mi.rcWork.left - mi.rcMonitor.left;
+                    mmi->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
+                    mmi->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
+                    mmi->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+                }
                 if (prefs_.compact) {
                     mmi->ptMinTrackSize.x = MulDiv(320, static_cast<int>(dpi), 96);
                     mmi->ptMinTrackSize.y = MulDiv(208, static_cast<int>(dpi), 96);
@@ -1121,18 +1263,40 @@ private:
                 }
                 return 0;
             }
-            case WM_SIZE:
-                webview_.resize_to_parent();
-                if (!prefs_.compact && wp == SIZE_RESTORED) {
-                    RECT rc{};
-                    GetWindowRect(hwnd, &rc);
-                    prefs_.window_width = rc.right - rc.left;
-                    prefs_.window_height = rc.bottom - rc.top;
-                    prefs_.window_x = rc.left;
-                    prefs_.window_y = rc.top;
+            case WM_SYSCOMMAND:
+                if ((wp & 0xFFF0) == SC_KEYMENU && lp == 0) {
+                    return 0;
                 }
-                if (webview_.is_ready()) send_view_state();
+                break;
+            case WM_NCLBUTTONDBLCLK:
+                if (wp == HTCAPTION && !prefs_.compact) {
+                    toggle_maximize();
+                    return 0;
+                }
+                break;
+            case WM_SIZE: {
+                if (wp == SIZE_MINIMIZED) {
+                    webview_.set_visible(false);
+                } else {
+                    if (ui_visible_) webview_.set_visible(true);
+                    webview_.resize_to_parent();
+                    update_dwm_corners();
+                    if (!prefs_.compact) {
+                        full_maximized_ = (wp == SIZE_MAXIMIZED);
+                        if (wp == SIZE_RESTORED) {
+                            RECT rc{};
+                            GetWindowRect(hwnd, &rc);
+                            UINT dpi = window_dpi(hwnd);
+                            prefs_.window_width = MulDiv(rc.right - rc.left, 96, static_cast<int>(dpi));
+                            prefs_.window_height = MulDiv(rc.bottom - rc.top, 96, static_cast<int>(dpi));
+                            prefs_.window_x = rc.left;
+                            prefs_.window_y = rc.top;
+                        }
+                    }
+                    if (webview_.is_ready()) send_view_state();
+                }
                 return 0;
+            }
             case WM_MOVE:
                 if (!prefs_.compact && !IsZoomed(hwnd) && !IsIconic(hwnd)) {
                     RECT rc{};

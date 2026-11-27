@@ -227,4 +227,6 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
+
+  send('ready');
 })();
