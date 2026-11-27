@@ -80,7 +80,7 @@ jobs:
             -ext WixToolset.Util.wixext `
             -d "AppVersion=$ver" `
             -o releases/TypeCount-Setup-x64.msi
-          if (!(Test-Path releases/TypeCount-Setup-x64.msi)) { throw "MSI build failed" }
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path releases/TypeCount-Setup-x64.msi)) { throw "MSI build failed with exit $LASTEXITCODE" }
           New-Item -ItemType Directory -Force -Path msi_verify | Out-Null
           $msiPath = (Resolve-Path releases/TypeCount-Setup-x64.msi).Path
           $targetDir = (Resolve-Path msi_verify).Path

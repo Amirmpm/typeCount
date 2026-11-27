@@ -15,19 +15,19 @@
 
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
-    <Icon Id="TypeCountIcon.ico" SourceFile="..\assets\typecount.ico" />
+    <Icon Id="TypeCountIcon.ico" SourceFile="assets\typecount.ico" />
     <Property Id="ARPPRODUCTICON" Value="TypeCountIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/Amirmpm/typeCount" />
     <Property Id="ARPHELPLINK" Value="https://github.com/Amirmpm/typeCount/issues" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch TypeCount when setup exits" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
 
-    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\License.rtf" />
 
     <util:CloseApplication Id="CloseRunningTypeCount"
                            Target="TypeCount.exe"
                            CloseMessage="yes"
-                           TerminateProcess="1"
+                           TerminateProcess="yes"
                            Timeout="3"
                            RebootPrompt="no" />
 
@@ -52,8 +52,9 @@
     </Property>
 
     <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="*">
-      <File Id="TypeCountExe" Source="..\releases\TypeCount.exe" />
+      <File Id="TypeCountExe" Source="releases\TypeCount.exe" />
       <RemoveFolder Id="CleanInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RemoveFolder Id="CleanProgramsDir" Directory="ProgramsDir" On="uninstall" />
       <RegistryValue Root="HKCU"
                      Key="Software\TypeCount"
                      Name="InstallFolder"
