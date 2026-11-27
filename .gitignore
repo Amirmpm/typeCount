@@ -1,0 +1,16 @@
+*.o
+*.obj
+*.res
+*.tmp
+*.log
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.venv/
+.cache/
+__pycache__/
+/build/
+/dist/
+/out/
+/target/
+/tests/bin/

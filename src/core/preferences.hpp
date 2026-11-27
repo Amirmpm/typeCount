@@ -1,0 +1,179 @@
+#pragma once
+
+#include "json.hpp"
+#include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace tc {
+
+struct Preferences {
+    std::string language = "en";          // "en", "fa", "system"
+    std::string theme = "blue";           // "blue", "teal", "violet", "graphite"
+    std::string ui_scale = "100";         // "80", "90", "100", "115", "130", "150"
+    std::string today_period = "calendar_day"; // "calendar_day", "rolling_24h"
+    std::string timezone = "system";      // "system" or offset/zone
+    std::string keyboard_layout = "compact"; // "compact", "full_size"
+    std::string keyboard_view = "layout";    // "layout", "treemap"
+    std::string close_action = "ask";     // "ask", "hide", "stealth", "quit"
+    std::string startup_mode = "tray";    // "tray", "stealth"
+    std::string wake_hotkey = "Ctrl+Alt+Shift+T"; // "Ctrl+Alt+Shift+T", "Ctrl+Alt+K", "Ctrl+Shift+F12", "Alt+Shift+T", "None"
+    bool stealth_mode = false;            // true = hide tray icon + work silently in background
+    bool compact = false;                 // Mini widget mode
+    bool pinned = true;                   // Mini always-on-top
+    bool sport_enabled = false;
+    bool sport_visible = true;
+    bool ignore_software_input = false;
+    bool track_apps = true;
+    bool auto_backup = true;
+    bool sidebar_collapsed = false;
+    int64_t daily_goal = 8000;
+    int break_interval_min = 45;          // 0=off, 20, 45, 60
+    int dpi_ppi = 96;
+    int window_width = 1160;
+    int window_height = 840;
+    int window_x = -1;
+    int window_y = -1;
+    std::string custom_db_dir;
+    std::vector<std::string> excluded_apps;
+
+    JsonValue to_json() const {
+        JsonValue o = JsonValue::object();
+        o.set("language", language);
+        o.set("theme", theme);
+        o.set("ui_scale", ui_scale);
+        o.set("today_period", today_period);
+        o.set("timezone", timezone);
+        o.set("keyboard_layout", keyboard_layout);
+        o.set("keyboard_view", keyboard_view);
+        o.set("close_action", close_action);
+        o.set("startup_mode", startup_mode);
+        o.set("wake_hotkey", wake_hotkey);
+        o.set("stealth_mode", stealth_mode);
+        o.set("compact", compact);
+        o.set("pinned", pinned);
+        o.set("sport_enabled", sport_enabled);
+        o.set("sport_visible", sport_visible);
+        o.set("ignore_software_input", ignore_software_input);
+        o.set("track_apps", track_apps);
+        o.set("auto_backup", auto_backup);
+        o.set("sidebar_collapsed", sidebar_collapsed);
+        o.set("daily_goal", daily_goal);
+        o.set("break_interval_min", break_interval_min);
+        o.set("dpi_ppi", dpi_ppi);
+        o.set("window_width", window_width);
+        o.set("window_height", window_height);
+        o.set("window_x", window_x);
+        o.set("window_y", window_y);
+        o.set("custom_db_dir", custom_db_dir);
+        JsonValue ex = JsonValue::array();
+        for (const auto& a : excluded_apps) ex.push(a);
+        o.set("excluded_apps", std::move(ex));
+        return o;
+    }
+
+    static Preferences from_json(const JsonValue& o) {
+        Preferences p;
+        if (!o.is_object()) return p;
+        p.language = o.get("language").as_string_or("en");
+        if (p.language != "en" && p.language != "fa" && p.language != "system") p.language = "en";
+
+        p.theme = o.get("theme").as_string_or("blue");
+        if (p.theme != "blue" && p.theme != "teal" && p.theme != "violet" && p.theme != "graphite") p.theme = "blue";
+
+        p.ui_scale = o.get("ui_scale").as_string_or("100");
+        if (p.ui_scale != "80" && p.ui_scale != "90" && p.ui_scale != "100" &&
+            p.ui_scale != "115" && p.ui_scale != "130" && p.ui_scale != "150") {
+            p.ui_scale = "100";
+        }
+
+        p.today_period = o.get("today_period").as_string_or("calendar_day");
+        if (p.today_period != "calendar_day" && p.today_period != "rolling_24h") p.today_period = "calendar_day";
+
+        p.timezone = o.get("timezone").as_string_or("system");
+        p.keyboard_layout = o.get("keyboard_layout").as_string_or("compact");
+        if (p.keyboard_layout != "compact" && p.keyboard_layout != "full_size") p.keyboard_layout = "compact";
+
+        p.keyboard_view = o.get("keyboard_view").as_string_or("layout");
+        if (p.keyboard_view != "layout" && p.keyboard_view != "treemap") p.keyboard_view = "layout";
+
+        p.close_action = o.get("close_action").as_string_or("ask");
+        if (p.close_action != "ask" && p.close_action != "hide" &&
+            p.close_action != "stealth" && p.close_action != "quit") {
+            p.close_action = "ask";
+        }
+
+        p.startup_mode = o.get("startup_mode").as_string_or("tray");
+        if (p.startup_mode != "tray" && p.startup_mode != "stealth") p.startup_mode = "tray";
+
+        p.wake_hotkey = o.get("wake_hotkey").as_string_or("Ctrl+Alt+Shift+T");
+        p.stealth_mode = o.get("stealth_mode").as_bool(false);
+        p.compact = o.get("compact").as_bool(false);
+        p.pinned = o.get("pinned").as_bool(true);
+        p.sport_enabled = o.get("sport_enabled").as_bool(false);
+        p.sport_visible = o.get("sport_visible").as_bool(true);
+        p.ignore_software_input = o.get("ignore_software_input").as_bool(false);
+        p.track_apps = o.get("track_apps").as_bool(true);
+        p.auto_backup = o.get("auto_backup").as_bool(true);
+        p.sidebar_collapsed = o.get("sidebar_collapsed").as_bool(false);
+        p.daily_goal = std::max<int64_t>(500, std::min<int64_t>(500000, o.get("daily_goal").as_int(8000)));
+        p.break_interval_min = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(240, o.get("break_interval_min").as_int(45))));
+        p.dpi_ppi = static_cast<int>(std::max<int64_t>(72, std::min<int64_t>(320, o.get("dpi_ppi").as_int(96))));
+        p.window_width = static_cast<int>(std::max<int64_t>(720, std::min<int64_t>(3840, o.get("window_width").as_int(1160))));
+        p.window_height = static_cast<int>(std::max<int64_t>(540, std::min<int64_t>(2160, o.get("window_height").as_int(840))));
+        p.window_x = static_cast<int>(o.get("window_x").as_int(-1));
+        p.window_y = static_cast<int>(o.get("window_y").as_int(-1));
+        p.custom_db_dir = o.get("custom_db_dir").as_string_or("");
+        const auto& ex = o.get("excluded_apps");
+        if (ex.is_array()) {
+            for (const auto& item : ex.arr) {
+                if (item.is_string() && !item.as_string().empty()) {
+                    p.excluded_apps.push_back(item.as_string());
+                }
+            }
+        }
+        return p;
+    }
+
+    static Preferences load_file(const std::string& path, bool* ok = nullptr) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) {
+            if (ok) *ok = false;
+            return Preferences{};
+        }
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        JsonValue val;
+        if (!JsonValue::parse(ss.str(), val)) {
+            if (ok) *ok = false;
+            return Preferences{};
+        }
+        if (ok) *ok = true;
+        return from_json(val);
+    }
+
+    bool save_file(const std::string& path) const {
+        std::string tmp = path + ".tmp";
+        {
+            std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+            if (!f) return false;
+            std::string body = to_json().dump(2);
+            f.write(body.data(), static_cast<std::streamsize>(body.size()));
+            if (!f.good()) return false;
+        }
+        std::remove(path.c_str());
+        if (std::rename(tmp.c_str(), path.c_str()) != 0) {
+            std::ofstream f(path, std::ios::binary | std::ios::trunc);
+            if (!f) return false;
+            std::string body = to_json().dump(2);
+            f.write(body.data(), static_cast<std::streamsize>(body.size()));
+            std::remove(tmp.c_str());
+            return f.good();
+        }
+        return true;
+    }
+};
+
+} // namespace tc
