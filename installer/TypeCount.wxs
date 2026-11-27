@@ -43,13 +43,16 @@
 
     <StandardDirectory Id="DesktopFolder" />
 
-    <Property Id="INSTALLFOLDER">
+    <Property Id="SAVED_INSTALLFOLDER">
       <RegistrySearch Id="FindInstallFolder"
                       Root="HKCU"
                       Key="Software\TypeCount"
                       Name="InstallFolder"
                       Type="raw" />
     </Property>
+    <SetDirectory Id="INSTALLFOLDER"
+                  Value="[SAVED_INSTALLFOLDER]"
+                  Condition="SAVED_INSTALLFOLDER" />
 
     <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="*">
       <File Id="TypeCountExe" Source="releases\TypeCount.exe" />
@@ -112,7 +115,7 @@
 
     <CustomAction Id="LaunchApplication"
                   FileRef="TypeCountExe"
-                  ExeCommand=""
+                  ExeCommand="--replace"
                   Return="asyncNoWait" />
 
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />

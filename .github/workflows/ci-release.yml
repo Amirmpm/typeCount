@@ -74,20 +74,29 @@ jobs:
           $hdr = Get-Content src/core/version.hpp -Raw
           if ($hdr -match '#define TC_VERSION_STR_4\s+"([^"]+)"') { $ver = $Matches[1] } else { $ver = "1.1.0.0" }
           Write-Host "Building TypeCount MSI version $ver"
-          wix build installer/TypeCount.wxs `
+          $wixOut = & wix build installer/TypeCount.wxs `
             -arch x64 `
             -ext WixToolset.UI.wixext `
             -ext WixToolset.Util.wixext `
             -d "AppVersion=$ver" `
-            -o releases/TypeCount-Setup-x64.msi
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path releases/TypeCount-Setup-x64.msi)) { throw "MSI build failed with exit $LASTEXITCODE" }
+            -o releases/TypeCount-Setup-x64.msi 2>&1
+          $wixOut | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path releases/TypeCount-Setup-x64.msi)) {
+            $errLine = ($wixOut | Out-String) -replace "`r?`n", " | "
+            Write-Host "::error::$errLine"
+            throw "MSI build failed with exit $LASTEXITCODE"
+          }
           New-Item -ItemType Directory -Force -Path msi_verify | Out-Null
           $msiPath = (Resolve-Path releases/TypeCount-Setup-x64.msi).Path
           $targetDir = (Resolve-Path msi_verify).Path
-          $p = Start-Process msiexec.exe -ArgumentList "/a `"$msiPath`" /qn TARGETDIR=`"$targetDir`"" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "msiexec admin unpack exited $($p.ExitCode)" }
+          $p = Start-Process msiexec.exe -ArgumentList "/a `"$msiPath`" /qn TARGETDIR=`"$targetDir`" /l*v msi_admin.log" -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            $logTail = (Get-Content msi_admin.log -Tail 30 | Out-String) -replace "`r?`n", " | "
+            Write-Host "::error::msiexec exited $($p.ExitCode): $logTail"
+            throw "msiexec admin unpack exited $($p.ExitCode)"
+          }
           Get-ChildItem -Recurse msi_verify -Filter TypeCount.exe | Select-Object FullName, Length
-          Remove-Item -Recurse -Force msi_verify
+          Remove-Item -Recurse -Force msi_verify, msi_admin.log -ErrorAction SilentlyContinue
       - name: Upload Windows Release Bundle
         uses: actions/upload-artifact@v4
         with:
