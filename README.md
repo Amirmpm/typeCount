@@ -2,8 +2,6 @@
 
 **TypeCount** is a privacy-first, offline Windows desktop application for tracking keyboard and mouse activity, analytics, shortcuts, per-application breakdowns, typing speed, and ergonomic habits — built in native C++17 (Win32 Raw Input + Edge WebView2 + SQLite3).
 
-Inspired by and adapted from [ClickPulse](https://github.com/endNone/ClickPulse) (`GPL-3.0-or-later`), TypeCount keeps the clean navy-and-card visual design and rich visualizations while using original branding, icons, and a standalone C++ Windows host.
-
 ## Key Features
 
 - **Native Windows Background Capture (`WM_INPUT`)**: Counts keystrokes, mouse clicks (Left/Right/Middle/Side Back/Side Forward), scroll wheel events, mouse travel distance, and modifier shortcut chords across Windows with minimal CPU and ~3 MB idle RAM when hidden.
@@ -29,6 +27,8 @@ Inspired by and adapted from [ClickPulse](https://github.com/endNone/ClickPulse)
 The standalone x86_64 Windows binary (requires only Windows 10/11 Edge WebView2 Runtime, built into modern Windows) is located at:
 
 - `releases/TypeCount.exe`
+
+Current build: PE32+ x86-64 GUI, 2.08 MB, SHA-256 `a1f72323612d7c3beaeb6e02c6f113cc66a9e1e6451c41222eee2f64e25e30e5`, built with zig 0.17.1 — all C++ core tests and UI/i18n checks passing.
 
 ### CLI Flags
 
