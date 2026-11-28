@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TypeCount — Keyboard &amp; Mouse Activity Tracker</title>
+<meta name="description" content="TypeCount is a privacy-first, offline desktop app for Windows, macOS and Linux that tracks keyboard and mouse activity, typing speed and ergonomic wellness — locally, in SQLite.">
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://typecount.pages.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TypeCount">
+<meta property="og:title" content="TypeCount — Every keystroke, counted locally">
+<meta property="og:description" content="Privacy-first desktop tracker for keyboard &amp; mouse activity, typing speed and ergonomic wellness. Windows, macOS, Linux. 100% offline.">
+<meta property="og:image" content="/assets/typecount-mark.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0b1220">
+<link rel="stylesheet" href="/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "TypeCount",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Windows, macOS, Linux",
+  "description": "Privacy-first offline desktop app that tracks keyboard and mouse activity, typing speed and ergonomic wellness locally.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "downloadUrl": "https://github.com/Amirmpm/typeCount/releases/latest",
+  "codeRepository": "https://github.com/Amirmpm/typeCount"
+}
+</script>
+</head>
+<body>
+
+<!-- ===== NAV ===== -->
+<nav class="nav" id="top">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">
+      <span class="brand-icon"><img src="/assets/typecount-mark.png" alt="TypeCount logo"></span>
+      <span class="brand-name">TypeCount<small>Keyboard &amp; Mouse</small></span>
+    </a>
+    <div class="nav-links">
+      <a href="#simulator">Live dashboard</a>
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#download">Download</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn ghost" href="https://github.com/Amirmpm/typeCount" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn primary" href="#download">Download latest</a>
+    </div>
+    <button class="burger" id="burger" aria-label="Menu" aria-expanded="false">☰</button>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<header class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <span class="pill" id="versionPill"><span class="live-dot"></span> <span id="versionText">Latest release</span> · Windows · macOS · Linux</span>
+      <h1>Every keystroke.<br><em>Counted locally.</em></h1>
+      <p class="lede">TypeCount is a privacy-first desktop app that tracks keyboard &amp; mouse activity, typing speed, ergonomic wellness and per-app breakdowns — with native OS capture and local SQLite storage. No cloud. No key logging.</p>
+      <div class="hero-actions">
+        <a class="btn primary big" href="#download">⬇ Download free</a>
+        <a class="btn ghost big" href="#simulator">▶ Count my real activity</a>
+      </div>
+      <ul class="hero-chips">
+        <li>100% offline</li><li>Never logs what you type</li><li>Stealth mode</li><li>EN / فارسی RTL</li><li>GPLv3</li>
+      </ul>
+    </div>
+    <div class="hero-stats" aria-label="Highlights">
+      <div class="hstat"><strong data-count="3">0</strong><span>platforms</span></div>
+      <div class="hstat"><strong data-count="9">0</strong><span>languages</span></div>
+      <div class="hstat"><strong data-count="365">0</strong><span>day calendar</span></div>
+      <div class="hstat"><strong>0<span class="unit">KB</span></strong><span>data sent out</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== LIVE DASHBOARD (real activity, Overview replica) ===== -->
+<section class="sim-section" id="simulator">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Live dashboard</span>
+      <h2>Your real activity, counted right now</h2>
+      <p>This is not a demo. Scroll, click, move your mouse and type on this page — every number below is measured from your actual input, stored only in this browser. No fake data, nothing uploaded.</p>
+      <p class="sim-scope"><strong>Scope, honestly:</strong> browsers cannot see activity in other apps. This counts genuine input on this page only — the desktop app counts everything system-wide.</p>
+    </div>
+
+    <div class="window reveal" id="simWindow">
+      <!-- title bar -->
+      <div class="win-bar">
+        <span class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></span>
+        <span class="win-title">TypeCount — Overview</span>
+        <span class="win-controls"><i>–</i><i>▢</i><i class="close">✕</i></span>
+      </div>
+      <div class="win-body">
+        <!-- sidebar -->
+        <aside class="sim-side">
+          <div class="sim-brand"><span class="brand-icon sm"><img src="/assets/typecount-mark.png" alt=""></span><div>TypeCount<small>Keyboard &amp; Mouse</small></div></div>
+          <nav class="sim-nav">
+            <button class="selected" data-nav="Overview"><svg viewBox="0 0 24 24"><path d="M5 21v-6m7 6V9m7 12V3"/></svg>Overview</button>
+            <button data-nav="History"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>History</button>
+            <button data-nav="Heatmap"><svg viewBox="0 0 24 24"><path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>Heatmap</button>
+            <button data-nav="Applications"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>Applications</button>
+            <button data-nav="Shortcuts"><svg viewBox="0 0 20 20"><path d="M11 2 5 11h5l-1 7 6-10h-5Z"/></svg>Shortcuts</button>
+            <button data-nav="Typing Test"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>Typing Test</button>
+            <button data-nav="Report"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>Report</button>
+            <button data-nav="Settings"><svg viewBox="0 0 24 24"><path d="m9.5 3-.5 2-2 1-2-.5-2 3.5L4.5 11v2L3 15l2 3.5 2-.5 2 1 .5 2h5l.5-2 2-1 2 .5 2-3.5-1.5-2v-2L21 9l-2-3.5-2 .5-2-1-.5-2Z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button>
+          </nav>
+          <div class="sim-side-foot"><span>TypeCount</span><span class="ver" id="simVersion">latest</span></div>
+        </aside>
+
+        <!-- main -->
+        <div class="sim-main">
+          <div class="sim-head">
+            <h3>Overview <span class="live-dot"></span></h3>
+            <div class="sim-head-actions">
+              <span class="capture-badge" id="captureStatus">● Counting live · saved in this browser only</span>
+              <button class="btn ghost sm" id="exportLive" title="Download your local activity as JSON">⭳ Export</button>
+              <button class="btn ghost sm" id="resetLive" title="Clear everything counted in this browser">↺ Reset</button>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <article class="metric featured">
+              <div class="metric-label">Today</div>
+              <div class="metric-number" id="mToday">0</div>
+              <div class="metric-details" id="mTodayDetail">— keystrokes</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">Last 7 days</div>
+              <div class="metric-number" id="mWeek">0</div>
+              <div class="metric-details" id="mWeekDetail">— keystrokes</div>
+            </article>
+            <article class="metric">
+              <div class="metric-label">Total activity</div>
+              <div class="metric-number" id="mLife">0</div>
+              <div class="metric-details" id="mLifeDetail">— keystrokes</div>
+            </article>
+          </div>
+
+          <!-- live strip -->
+          <div class="live card" id="liveStrip">
+            <div class="live-main">
+              <span class="live-label"><span class="live-dot"></span> Live typing <span class="live-state" id="liveState">waiting for input…</span></span>
+              <div class="live-wpm"><strong id="liveWpm">0.0</strong><span>WPM</span></div>
+              <div class="live-sub">
+                <span id="liveCpm">0 CPM</span>
+                <span id="liveScroll">0 scrolls this session</span>
+                <span id="peakWpm">Peak today: 0 WPM</span>
+              </div>
+              <div class="live-sub" style="margin-top:6px">
+                <span id="liveMove">0.0 m cursor travel</span>
+                <span id="liveSession">Session 0:00</span>
+              </div>
+            </div>
+            <div class="live-try" id="countedArea">
+              <div class="try-head">✍ Do real work here — it all counts</div>
+              <div class="try-area" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="Free typing area — your typing is counted">Start typing a sentence, paste your notes, or draft an email. Keystrokes, clicks, scrolls and cursor distance are measured as you go — the content itself is never stored or read.</div>
+              <div class="try-meta">
+                <span title="Typing inside password or email fields is never counted">⌨️ Keys counted live</span>
+                <span>🖱️ Clicks &amp; wheel</span>
+                <span>📏 Cursor metres</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- charts -->
+          <div class="chart-grid">
+            <div class="card chart-card">
+              <div class="card-head">
+                <div><h4>Activity over time</h4><p id="chartCaption">Today</p></div>
+                <div class="segments" id="rangeSeg">
+                  <button data-range="24h" class="selected">24h</button>
+                  <button data-range="7d">7d</button>
+                  <button data-range="30d">30d</button>
+                </div>
+              </div>
+              <div class="legend"><span><i class="dot kb"></i>Keyboard</span><span><i class="dot ms"></i>Mouse</span></div>
+              <div class="chart-wrap">
+                <div class="chart" id="hourlyChart" role="img" aria-label="Activity chart from your real input"></div>
+                <p class="chart-empty" id="chartEmpty">No activity recorded in this range yet.<br><span>Click, scroll or type above and the bars appear.</span></p>
+              </div>
+            </div>
+            <div class="card chart-card">
+              <div class="card-head"><div><h4>Activity mix</h4><p>Your real input today</p></div></div>
+              <div class="donut" id="donut"></div>
+              <div class="donut-legend" id="donutLegend"></div>
+            </div>
+          </div>
+
+          <div class="chart-grid2">
+            <div class="card">
+              <div class="card-head"><div><h4>Mouse odometer</h4><p>Real cursor travel today</p></div><strong class="big-num" id="odoNum">0 m</strong></div>
+              <div class="bar-track"><div class="bar-fill" id="odoBar"></div></div>
+              <p class="quiet" id="odoNote">Goal: 500 m/day · streak: 0 days</p>
+            </div>
+            <div class="card">
+              <div class="card-head"><div><h4>Ergonomic insights</h4><p>Strain Guard</p></div><span class="badge ok" id="strainBadge">Healthy</span></div>
+              <p class="quiet">You typed <strong id="strainKeys">0</strong> keys in the last hour. Aim for a 20-second break every 30 minutes.</p>
+              <div class="bar-track"><div class="bar-fill" id="strainBar" style="width:0%"></div></div>
+              <p class="quiet" id="strainNote">Strain level: low · nothing logged this hour yet</p>
+            </div>
+          </div>
+
+          <!-- calendar -->
+          <div class="card heatmap-card">
+            <div class="card-head"><div><h4>365-day activity calendar</h4><p>Built from your real days · hover any cell</p></div><span class="quiet" id="calTotal"></span></div>
+            <div class="heatmap" id="heatmap"></div>
+            <div class="heatmap-foot"><span>Less</span><span class="heat-scale"><i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><i class="level-4"></i></span><span>More</span></div>
+          </div>
+
+          <p class="sim-note">Every figure on this page is measured from your input and kept in this browser's local storage — clear it any time with Reset. For system-wide counting across all apps, <a href="#download">get the desktop app</a>.</p>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+  </div>
+</section>
+
+<!-- ===== FEATURES ===== -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Features</span>
+      <h2>Built native. Built private.</h2>
+    </div>
+    <div class="feat-grid">
+      <article class="feat reveal"><span class="feat-ic">⚡</span><h3>Native background capture</h3><p>Counts keystrokes, clicks, scrolls, cursor distance and shortcut chords via <code>WM_INPUT</code>, <code>CGEventTap</code> and <code>XInput2</code> — with minimal CPU overhead.</p></article>
+      <article class="feat reveal"><span class="feat-ic">🔒</span><h3>Strict local privacy</h3><p>Never logs typed characters, passwords, clipboard, window titles or coordinates. Only aggregate key codes and counts, stored in local SQLite.</p></article>
+      <article class="feat reveal"><span class="feat-ic">👻</span><h3>Tray &amp; Stealth mode</h3><p>Live in the tray or vanish completely. Wake stealth mode anytime with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> — or just relaunch the app.</p></article>
+      <article class="feat reveal"><span class="feat-ic">📊</span><h3>Rich analytics</h3><p>Live WPM/CPM, mouse odometer, streaks, keyboard heatmap &amp; treemap, 365-day calendar, hourly trends and per-app attribution.</p></article>
+      <article class="feat reveal"><span class="feat-ic">⌨️</span><h3>Typing test &amp; shortcuts</h3><p>Speed tests in English, فارسی and Code, plus a platform-aware shortcut atlas and 7 styled PNG report cards to share your stats.</p></article>
+      <article class="feat reveal"><span class="feat-ic">🌍</span><h3>Multilingual &amp; themed</h3><p>English and Persian (full RTL + Jalali calendar) plus 7 more languages. Light/dark modes, 4 palettes, 80–150% UI scaling, CSV/JSON export.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PRIVACY ===== -->
+<section id="privacy">
+  <div class="wrap privacy-grid">
+    <div class="reveal">
+      <span class="eyebrow">Privacy</span>
+      <h2>Your data never leaves your machine.</h2>
+      <p>TypeCount has no account, no analytics SDK and no network calls for your activity. Everything lives in <code>typecount.sqlite3</code> on your disk — export it, back it up, or merge databases across machines whenever you like.</p>
+      <a class="btn ghost" href="https://github.com/Amirmpm/typeCount" target="_blank" rel="noopener">Read the source on GitHub →</a>
+    </div>
+    <div class="privacy-cards reveal">
+      <div class="p-card never"><h3>✕ Never stored</h3><ul><li>Typed characters &amp; passwords</li><li>Clipboard contents</li><li>Window titles &amp; screen coordinates</li><li>Anything sent to a server</li></ul></div>
+      <div class="p-card stored"><h3>✓ Stored locally</h3><ul><li>Aggregate key codes &amp; click counts</li><li>Scroll steps &amp; cursor distance</li><li>Optional foreground app names</li><li>Daily totals in SQLite</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== DOWNLOAD ===== -->
+<section id="download">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Download</span>
+      <h2>Get the latest TypeCount — free &amp; open source</h2>
+      <p>Windows 10/11 · macOS 11+ (Apple Silicon &amp; Intel) · Linux x64 · <span id="dlVersion">Always the newest release</span></p>
+    </div>
+    <div class="dl-grid">
+      <article class="dl-card reveal">
+        <span class="dl-ic">🪟</span><h3>Windows</h3><p>x64 · MSI / Setup EXE / Portable</p>
+        <a class="btn primary block" data-asset="win-msi" href="https://github.com/Amirmpm/typeCount/releases/latest">Download MSI</a>
+        <div class="dl-alt"><a data-asset="win-setup" href="https://github.com/Amirmpm/typeCount/releases/latest">Setup EXE</a> · <a data-asset="win-portable" href="https://github.com/Amirmpm/typeCount/releases/latest">Portable</a></div>
+      </article>
+      <article class="dl-card reveal">
+        <span class="dl-ic">🍎</span><h3>macOS</h3><p>Universal · DMG / Portable ZIP</p>
+        <a class="btn primary block" data-asset="mac-dmg" href="https://github.com/Amirmpm/typeCount/releases/latest">Download DMG</a>
+        <div class="dl-alt"><a data-asset="mac-zip" href="https://github.com/Amirmpm/typeCount/releases/latest">Portable ZIP</a></div>
+      </article>
+      <article class="dl-card reveal">
+        <span class="dl-ic">🐧</span><h3>Linux</h3><p>x64 · DEB / Portable TAR.GZ</p>
+        <a class="btn primary block" data-asset="linux-deb" href="https://github.com/Amirmpm/typeCount/releases/latest">Download DEB</a>
+        <div class="dl-alt"><a data-asset="linux-tar" href="https://github.com/Amirmpm/typeCount/releases/latest">Portable TAR.GZ</a></div>
+      </article>
+    </div>
+    <p class="dl-note reveal">Every button above resolves to the newest GitHub release automatically. Browse <a href="https://github.com/Amirmpm/typeCount/releases" target="_blank" rel="noopener">all releases</a> or <a href="https://github.com/Amirmpm/typeCount" target="_blank" rel="noopener">the repository</a> — or build from source with <code>scripts/build_windows.sh</code>, <code>build_macos.sh</code>, <code>build_linux.sh</code>.</p>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+  <div class="wrap foot-in">
+    <div class="brand"><span class="brand-icon sm"><img src="/assets/typecount-mark.png" alt=""></span><span class="brand-name">TypeCount<small>Keyboard &amp; Mouse</small></span></div>
+    <p>Licensed under <a href="https://github.com/Amirmpm/typeCount/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPLv3</a> · UI concepts adapted from <a href="https://github.com/endNone/ClickPulse" target="_blank" rel="noopener">ClickPulse</a> · Made for people who count.</p>
+    <a class="btn ghost sm" href="#top">↑ Back to top</a>
+  </div>
+</footer>
+
+<script src="/live.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

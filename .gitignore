@@ -15,3 +15,12 @@ __pycache__/
 /target/
 /tests/bin/
 /releases/
+
+# local test deps / scratch
+node_modules/
+package-lock.json
+landing/.test-live.js
+
+# wrangler local state
+.wrangler/
+.dev.vars
