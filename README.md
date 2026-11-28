@@ -2,21 +2,15 @@
 
 **TypeCount** is a privacy-first, offline cross-platform desktop application (**Windows**, **macOS**, and **Linux**) for tracking keyboard and mouse activity, typing speed, ergonomic wellness, shortcuts, and per-application breakdowns — built with native OS input capture (`WM_INPUT`, `CGEventTap`, `XInput2` / `evdev`), native WebView hosts (`Edge WebView2`, `WKWebView`, `WebKit2GTK`), and local SQLite storage.
 
-## Download (`v1.2.0`)
+## Download ([v1.2.0](https://github.com/Amirmpm/typeCount/releases/tag/v1.2.0))
 
-> **Latest Release: [`v1.2.0`](https://github.com/Amirmpm/typeCount/releases/tag/v1.2.0)** · Pick your operating system below for a direct download, or browse all assets on **[GitHub Releases](https://github.com/Amirmpm/typeCount/releases/latest)**.
->
-> | Platform | Type | Direct Download | Size | Details |
-> |---|---|---|---|---|
-> | **Windows (x64)** | Standard Installer (`.msi`) | [**Download `.msi`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.msi) | `1.49 MB` | MSI installer with in-place upgrade detection, shortcuts & Apps & Features uninstaller |
-> | **Windows (x64)** | Setup Wizard (`.exe`) | [**Download Setup `.exe`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.exe) | `2.42 MB` | DPI-scaled 4-step bilingual wizard (EN / فارسی) with dark mode & clean uninstaller |
-> | **Windows (x64)** | Portable (`.exe`) | [**Download Portable `.exe`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-portable.exe) | `2.17 MB` | Single standalone binary for Windows 10/11 (x64), zero installation required |
-> | **macOS (Universal)** | Disk Image (`.dmg`) | [**Download `.dmg`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-setup.dmg) | `2.51 MB` | Drag-to-Applications installer for Apple Silicon (`arm64`) & Intel (`x86_64`) |
-> | **macOS (Universal)** | Portable Bundle (`.zip`) | [**Download `.zip`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-portable.zip) | `1.98 MB` | Signed Universal `TypeCount.app` archive for macOS 11+ |
-> | **Linux (x64)** | Debian / Ubuntu (`.deb`) | [**Download `.deb`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-setup.deb) | `851 KB` | System-wide install (`/usr/bin/typecount`, desktop launcher, hicolor icon) |
-> | **Linux (x64)** | Portable Archive (`.tar.gz`) | [**Download `.tar.gz`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-portable.tar.gz) | `1003 KB` | Standalone `typecount` binary with optional user `install.sh` / `uninstall.sh` scripts |
+| Platform | Installer | Portable |
+|---|---|---|
+| **Windows** (x64) | [MSI](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.msi) · [Setup EXE](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.exe) | [EXE](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-portable.exe) |
+| **macOS** (Universal) | [DMG](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-setup.dmg) | [ZIP](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-portable.zip) |
+| **Linux** (x64) | [DEB](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-setup.deb) | [TAR.GZ](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-portable.tar.gz) |
 
-> **Requirements:** Windows 10/11 (`x64` with built-in Edge WebView2), macOS 11+ (`arm64` / `x86_64` with Accessibility / Input Monitoring permission), or Linux (`x64` with GTK3 + WebKit2GTK; X11 XInput2 or `input` group evdev).
+<sub>Windows 10/11 (x64) · macOS 11+ (Apple Silicon & Intel) · Linux x64 (GTK3 + WebKit2GTK)</sub>
 
 ## What's New in v1.2.0
 
