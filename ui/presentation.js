@@ -1,9 +1,9 @@
 (() => {
-  const view={timezone:'system',today_period:'calendar_day',ui_scale:'100',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
+  const view={timezone:'system',today_period:'calendar_day',ui_scale:'100',compact:false,pinned:true,visible:true,theme:window.clickpulseTheme||'blue',color_mode:window.clickpulseColorMode||'system',sport_enabled:false,sport_visible:false,auto_check_updates:true,last_update_check:null};
   window.presentationView=view;
   const put=(id,value)=>window.setSelectableText($(id),value);
-  const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
-  if(onWindows||onLinux||window.clickpulsePlatform==='macos'){
+  const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux',onMac=window.clickpulsePlatform==='macos';
+  if(onWindows||onLinux||onMac){
     document.querySelector('header').addEventListener('mousedown',event=>{
       if(event.button!==0||event.target.closest('button,select,input,a,[role="combobox"],.window-controls'))return;
       event.preventDefault();send('drag');
@@ -17,6 +17,8 @@
     for(const [id,action] of [['window-minimize','minimize'],['window-maximize','maximize'],['window-close','close']]) {
       $(id).addEventListener('click',event=>{event.stopPropagation();send(action);});
     }
+  }
+  if(onWindows||onLinux||onMac){
     $('close-action-row').hidden=false;
     $('close-action-select').addEventListener('change',event=>send('close_preference',{close_action:event.target.value}));
     const overlay=$('close-overlay'),remember=$('close-remember');
@@ -69,6 +71,7 @@
     if(typeof next.jalali_calendar==='boolean')window.setInterfaceJalali?.(next.jalali_calendar);
     if(next.locale)window.setInterfaceLanguage(next.locale,next.language_preference);
     if(next.theme)window.setInterfaceTheme(next.theme);
+    if(next.color_mode||typeof next.system_dark==='boolean')window.setInterfaceColorMode?.(next.color_mode||view.color_mode||'system',typeof next.system_dark==='boolean'?next.system_dark:undefined);
     const ttNav=$('typingtest-nav');
     if(ttNav)ttNav.hidden=view.typing_test_enabled===false;
     const ergoCard=$('tc-ergo-card');
@@ -84,8 +87,8 @@
       const key=view.maximized?'window.restore':'window.maximize';
       $('window-maximize').setAttribute('aria-label',t(key));$('window-maximize').title=t(key);
       $('window-maximize-glyph').setAttribute('d',view.maximized?'M5 3h8v8M3 5h8v8H3Z':'M3 3h10v10H3Z');
-      if(next.close_action){$('close-action-select').value=next.close_action;Dropdowns.sync('close-action-select');}
     }
+    if((onWindows||onLinux||onMac)&&next.close_action){$('close-action-select').value=next.close_action;Dropdowns.sync('close-action-select');}
     document.body.classList.toggle('compact',view.compact);
     if(view.compact||!view.visible){Dropdowns.closeAll();if(typeof ClickPulseDatePicker!=='undefined')ClickPulseDatePicker.closeAll();}
     $('mini-widget').hidden=!view.compact;

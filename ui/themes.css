@@ -7,27 +7,34 @@ nav button.selected:before,.live-dot {background:var(--focus)}
 .nav-icon {color:var(--nav-icon)}
 nav button.selected .nav-icon {color:var(--cyan)}
 .sidebar-bottom {border-color:var(--nav-line)}
-.button,select {color:var(--control-text);border-color:var(--control-border)}
+.button,select {background-color:var(--control-bg,var(--surface));color:var(--control-text);border-color:var(--control-border)}
 .button:hover,select:hover {background-color:var(--control-hover);border-color:var(--control-hover-border)}
-.button:disabled:hover,select:disabled:hover {background-color:white;border-color:var(--control-border)}
+.button:disabled:hover,select:disabled:hover {background-color:var(--control-bg,var(--surface));border-color:var(--control-border)}
 .button.primary {background:var(--blue);border-color:var(--blue);color:white}
 .button.primary:hover {background:var(--accent-hover)}
 .button.primary:disabled:hover {background:var(--blue);border-color:var(--blue);box-shadow:none}
 #compact.button.primary {background:var(--accent-strong);border-color:var(--accent-strong)}
 #compact.button.primary:not(:disabled):hover {background:var(--nav-selected);border-color:var(--nav-selected)}
+html[data-color-scheme="dark"] #compact.button.primary {color:#0c1524}
 button:focus-visible,select:focus-visible {outline-color:var(--blue)}
 .banner {background:var(--accent-soft);border-color:var(--accent-border);color:var(--accent-strong)}
 .metric.featured {background:linear-gradient(115deg,var(--featured-start),var(--featured-end));border-color:var(--featured-end)}
 .featured .metric-label,.featured .metric-label span,.featured .metric-details {color:var(--mini-muted)}
 .live {border-left-color:var(--focus)}
-.segments button.selected {color:var(--blue)}
+.segments {background:var(--segment-bg);border-color:var(--segment-border)}
+.segments button {color:var(--muted)}
+.segments button.selected {background:var(--segment-active-bg);color:var(--accent-strong)}
 #composition-legend strong {color:var(--accent-strong)}
 
 .level-0 {background:var(--heat-0)}.level-1 {background:var(--heat-1)}.level-2 {background:var(--heat-2)}.level-3 {background:var(--heat-3)}.level-4 {background:var(--heat-4)}
+.heat-cell {background:var(--heat-0)}
 .heat-cell:hover,.keyboard-key:focus-visible,.heat-cell.today {outline-color:var(--blue)}
 .keyboard-key {border-color:var(--key-border);border-bottom-color:var(--key-bottom)}
 .keyboard-key:hover {box-shadow:0 0 0 2px var(--focus)}
-th,.pill {background:var(--heat-0);color:var(--control-text)}
+th {background:var(--th-bg);color:var(--th-text)}
+td {color:var(--td-text);border-bottom-color:var(--line)}
+tbody tr:hover {background:var(--surface-hover)}
+.pill {background:var(--heat-0);color:var(--control-text)}
 .mini-widget {background:linear-gradient(128deg,var(--mini-start),var(--mini-end) 80%);border-color:var(--mini-edge)}
 .mini-grip,.mini-icon,.mini-eyebrow {color:var(--mini-muted)}
 .mini-icon:hover,#mini-pause:hover {background:var(--mini-hover);color:#f0f6ff}
@@ -39,6 +46,44 @@ th,.pill {background:var(--heat-0);color:var(--control-text)}
 .mini-device-label svg {stroke:var(--mini-device-icon)}
 #mini-pause {color:var(--mini-muted)}
 body.compact #toast {background:var(--nav-selected)}
+
+/* Dark Mode color scheme refinements */
+html[data-color-scheme="dark"] {color-scheme:dark}
+html[data-color-scheme="light"] {color-scheme:light}
+html[data-color-scheme="dark"] header {background:var(--surface);border-bottom-color:var(--line)}
+html[data-color-scheme="dark"] .banner p,
+html[data-color-scheme="dark"] .metric-label,
+html[data-color-scheme="dark"] .window span,
+html[data-color-scheme="dark"] .card-heading p,
+html[data-color-scheme="dark"] .legend,
+html[data-color-scheme="dark"] .trend-y-axis,
+html[data-color-scheme="dark"] .trend-x-axis,
+html[data-color-scheme="dark"] #composition-legend,
+html[data-color-scheme="dark"] .quiet,
+html[data-color-scheme="dark"] .heatmap-footer,
+html[data-color-scheme="dark"] .footnote,
+html[data-color-scheme="dark"] .setting-row p,
+html[data-color-scheme="dark"] .keyboard-bottom,
+html[data-color-scheme="dark"] .keyboard-treemap .empty-label,
+html[data-color-scheme="dark"] .empty-state,
+html[data-color-scheme="dark"] .chart .empty-label {color:var(--muted)}
+html[data-color-scheme="dark"] .setting-row strong,
+html[data-color-scheme="dark"] .empty-state strong {color:var(--text)}
+html[data-color-scheme="dark"] .banner.error {background:var(--error-bg);color:var(--error-text);border-color:var(--error-border)}
+html[data-color-scheme="dark"] #toast {background:var(--toast-bg);color:var(--toast-text)}
+html[data-color-scheme="dark"] #demo-badge {color:var(--accent-strong);border-color:var(--accent-border)}
+html[data-color-scheme="dark"] .window-control {color:var(--muted)}
+html[data-color-scheme="dark"] .preference-switch {background:var(--switch-off)}
+html[data-color-scheme="dark"] .preference-switch::before {background:var(--switch-knob)}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-ctrl {background:#13312b;color:#6ee7b7;border-color:#245a4f;border-bottom-color:#1c473e}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-alt {background:#362511;color:#fcd34d;border-color:#6b491f;border-bottom-color:#533716}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-shift {background:#261a42;color:#c4b5fd;border-color:#4a337d;border-bottom-color:#3a2763}
+html[data-color-scheme="dark"] .tc-break-card.due {background:var(--warn-bg);border-color:var(--warn-border)}
+html[data-color-scheme="dark"] .tc-strain-badge.level-0 {background:var(--ok-bg);color:var(--ok-text);border-color:var(--ok-border)}
+html[data-color-scheme="dark"] .tc-strain-badge.level-1 {background:var(--warn-bg);color:var(--warn-text);border-color:var(--warn-border)}
+html[data-color-scheme="dark"] .tc-strain-badge.level-2 {background:var(--error-bg);color:var(--error-text);border-color:var(--error-border)}
+html[data-color-scheme="dark"] .tc-app-exclude-btn:hover {color:var(--error-text);border-color:var(--error-border);background:var(--error-bg)}
+html[data-color-scheme="dark"] .tc-tt-char.bad {color:var(--error-text);background:var(--error-bg)}
 
 /* Use regional system fonts without bundling a full CJK font in every App. */
 :root:lang(zh-CN){--sans:"Segoe UI Variable","Segoe UI","Vazirmatn","Tahoma","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",system-ui,sans-serif}

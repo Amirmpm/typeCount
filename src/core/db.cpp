@@ -1,4 +1,5 @@
 #include "db.hpp"
+#include "version.hpp"
 #include "sqlite3.h"
 
 #include <algorithm>
@@ -755,7 +756,7 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
             "GROUP BY modifiers, key ORDER BY c DESC LIMIT 2000;", -1, &st, nullptr) == SQLITE_OK) {
             while (sqlite3_step(st) == SQLITE_ROW) {
                 JsonValue row = JsonValue::object();
-                row.set("platform", "windows");
+                row.set("platform", std::string(TC_PLATFORM_STR));
                 row.set("modifiers", sqlite3_column_int(st, 0));
                 row.set("key", sqlite3_column_int64(st, 1));
                 row.set("count", sqlite3_column_int64(st, 2));
@@ -929,7 +930,7 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
             sqlite3_bind_text(st, 2, q.report_day.c_str(), -1, SQLITE_STATIC);
             while (sqlite3_step(st) == SQLITE_ROW) {
                 JsonValue row = JsonValue::object();
-                row.set("platform", "windows");
+                row.set("platform", std::string(TC_PLATFORM_STR));
                 row.set("modifiers", sqlite3_column_int(st, 0));
                 row.set("key", sqlite3_column_int64(st, 1));
                 row.set("count", sqlite3_column_int64(st, 2));
@@ -953,7 +954,7 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
 
     JsonValue cap = JsonValue::object();
     cap.set("listening", q.capture.listening);
-    cap.set("permission_needed", false);
+    cap.set("permission_needed", q.capture.permission_needed);
     cap.set("error", q.capture.error ? JsonValue(q.capture.error_message) : JsonValue(nullptr));
     cap.set("error_code", q.capture.error_code.empty() ? JsonValue(nullptr) : JsonValue(q.capture.error_code));
 
@@ -1002,6 +1003,7 @@ JsonValue Db::build_snapshot(const SnapshotQuery& q) {
     snap.set("break_elapsed_sec", q.live.break_elapsed_sec);
     snap.set("break_interval_sec", static_cast<int64_t>(q.prefs.break_interval_min) * 60);
     snap.set("break_due", q.live.break_due);
+    snap.set("idle", q.live.is_idle);
     snap.set("today_active_sec", t_act);
     snap.set("lifetime_active_sec", l_act);
     snap.set("peak_hour", peak_hour);
@@ -1165,7 +1167,7 @@ JsonValue Db::build_demo_snapshot(const SnapshotQuery& q) const {
         {1, 3, 2760}, {1, 17, 2190}, {1, 13, 1840}, {2, 48, 4120}
     }) {
         JsonValue s = JsonValue::object();
-        s.set("platform", "windows");
+        s.set("platform", std::string(TC_PLATFORM_STR));
         s.set("modifiers", mods);
         s.set("key", key);
         s.set("count", cnt);
@@ -1251,7 +1253,7 @@ JsonValue Db::build_demo_snapshot(const SnapshotQuery& q) const {
     return snap;
 }
 
-bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string* err_out) {
+bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string* err_out, int dpi_ppi) {
     std::lock_guard<std::mutex> lk(mu_);
     if (!db_) {
         if (err_out) *err_out = "Database not open";
@@ -1278,7 +1280,8 @@ bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string*
     }
     sqlite3_bind_int(st, 1, tz_offset_sec);
     sqlite3_bind_int(st, 2, tz_offset_sec);
-    double px_to_m = 0.0254 / 96.0;
+    double ppi = dpi_ppi > 0 ? static_cast<double>(dpi_ppi) : 96.0;
+    double px_to_m = 0.0254 / ppi;
     while (sqlite3_step(st) == SQLITE_ROW) {
         const char* d = reinterpret_cast<const char*>(sqlite3_column_text(st, 0));
         int64_t kb = sqlite3_column_int64(st, 1);
@@ -1296,10 +1299,11 @@ bool Db::export_csv(const std::string& out_path, int tz_offset_sec, std::string*
     return f.good();
 }
 
-bool Db::export_json(const std::string& out_path, int tz_offset_sec, std::string* err_out) {
+bool Db::export_json(const std::string& out_path, int tz_offset_sec, std::string* err_out, int dpi_ppi) {
     SnapshotQuery q;
     q.now_ms = static_cast<int64_t>(std::time(nullptr)) * 1000;
     q.tz_offset_sec = tz_offset_sec;
+    q.prefs.dpi_ppi = dpi_ppi > 0 ? dpi_ppi : 96;
     q.include_shortcuts = true;
     q.include_apps = true;
     JsonValue snap = build_snapshot(q);

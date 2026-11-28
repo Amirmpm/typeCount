@@ -73,10 +73,10 @@ struct JsonValue {
         return type == Object && obj.find(k) != obj.end();
     }
     const JsonValue& get(const std::string& k) const {
-        static const JsonValue nil;
-        if (type != Object) return nil;
+        static const JsonValue k_null;
+        if (type != Object) return k_null;
         auto it = obj.find(k);
-        return it != obj.end() ? it->second : nil;
+        return it != obj.end() ? it->second : k_null;
     }
     void set(const std::string& k, JsonValue v) {
         if (type != Object) {

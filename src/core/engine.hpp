@@ -122,6 +122,11 @@ public:
         dirty_ = true;
     }
 
+    void set_idle_timeout_sec(int sec) {
+        std::lock_guard<std::mutex> lk(mu_);
+        idle_timeout_ms_ = static_cast<int64_t>(std::max(30, std::min(1800, sec))) * 1000LL;
+    }
+
     void reset_break_timer(int64_t now_ms) {
         std::lock_guard<std::mutex> lk(mu_);
         break_start_ms_ = now_ms;
@@ -147,6 +152,7 @@ public:
     LiveMetrics get_live_metrics(int64_t now_ms, int break_interval_min, int idle_timeout_sec = 90) {
         std::lock_guard<std::mutex> lk(mu_);
         prune_recent_locked(now_ms);
+        idle_timeout_ms_ = static_cast<int64_t>(std::max(30, std::min(1800, idle_timeout_sec))) * 1000LL;
 
         LiveMetrics m;
         m.keys_1m = static_cast<int64_t>(recent_keys_ms_.size());
@@ -165,9 +171,9 @@ public:
         }
         m.live_cps = count_since(recent_clicks_ms_, now_ms - 1000);
 
-        int64_t idle_ms = static_cast<int64_t>(std::max(30, idle_timeout_sec)) * 1000;
-        if (last_activity_ms_ > 0 && (now_ms - last_activity_ms_ >= idle_ms)) {
+        if (last_activity_ms_ > 0 && (now_ms - last_activity_ms_ >= idle_timeout_ms_)) {
             break_start_ms_ = 0;
+            m.is_idle = true;
         }
         if (break_start_ms_ > 0) {
             m.break_elapsed_sec = std::max<int64_t>(0, (now_ms - break_start_ms_) / 1000);
@@ -227,7 +233,7 @@ private:
     }
 
     void touch_break_locked(int64_t now_ms) {
-        if (break_start_ms_ == 0 || (last_activity_ms_ > 0 && now_ms - last_activity_ms_ >= 180000)) {
+        if (break_start_ms_ == 0 || (last_activity_ms_ > 0 && now_ms - last_activity_ms_ >= idle_timeout_ms_)) {
             break_start_ms_ = now_ms;
         }
         last_activity_ms_ = now_ms;
@@ -264,6 +270,7 @@ private:
     std::string last_app_name_;
     int64_t break_start_ms_ = 0;
     int64_t last_activity_ms_ = 0;
+    int64_t idle_timeout_ms_ = 180000;
 };
 
 } // namespace tc

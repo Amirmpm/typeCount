@@ -19,6 +19,7 @@
 #include <msi.h>
 
 #include "../core/json.hpp"
+#include "../core/sound_synth.hpp"
 #include "../core/version.hpp"
 
 #include <algorithm>
@@ -466,45 +467,79 @@ inline uint64_t idle_elapsed_ms() {
     LASTINPUTINFO lii{};
     lii.cbSize = sizeof(lii);
     if (!GetLastInputInfo(&lii)) return 0;
-    uint64_t now = GetTickCount64();
-    uint64_t last = static_cast<uint64_t>(lii.dwTime);
-    uint64_t now32 = static_cast<uint64_t>(GetTickCount());
-    return (now32 >= last) ? (now32 - last) : 0;
+    // Modular 32-bit unsigned difference handles GetTickCount() 49.7-day wraparound cleanly
+    uint32_t delta = static_cast<uint32_t>(GetTickCount()) - static_cast<uint32_t>(lii.dwTime);
+    return static_cast<uint64_t>(delta);
+}
+
+inline bool is_windows_dark_theme() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            0, KEY_READ, &key) == ERROR_SUCCESS) {
+        DWORD val = 1, sz = sizeof(val);
+        LONG rc = RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr, reinterpret_cast<BYTE*>(&val), &sz);
+        RegCloseKey(key);
+        if (rc == ERROR_SUCCESS) return val == 0;
+    }
+    return false;
+}
+
+inline void set_window_immersive_dark_mode(HWND hwnd, bool dark) {
+    if (!hwnd) return;
+    BOOL val = dark ? TRUE : FALSE;
+    // Attribute 20 on Windows 11 / Win10 20H1+, fallback 19 on older Win10
+    if (FAILED(DwmSetWindowAttribute(hwnd, static_cast<DWMWINDOWATTRIBUTE>(20), &val, sizeof(val)))) {
+        DwmSetWindowAttribute(hwnd, static_cast<DWMWINDOWATTRIBUTE>(19), &val, sizeof(val));
+    }
+}
+
+inline int detect_monitor_ppi(HWND hwnd = nullptr) {
+    HMONITOR mon = hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+                        : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    if (mon && GetMonitorInfoW(mon, &mi)) {
+        HDC hdc = CreateDCW(L"DISPLAY", mi.szDevice, nullptr, nullptr);
+        if (hdc) {
+            int px_w = GetDeviceCaps(hdc, DESKTOPHORZRES);
+            int px_h = GetDeviceCaps(hdc, DESKTOPVERTRES);
+            if (px_w <= 0) px_w = GetDeviceCaps(hdc, HORZRES);
+            if (px_h <= 0) px_h = GetDeviceCaps(hdc, VERTRES);
+            int mm_w = GetDeviceCaps(hdc, HORZSIZE);
+            int mm_h = GetDeviceCaps(hdc, VERTSIZE);
+            DeleteDC(hdc);
+            if (px_w >= 640 && px_h >= 480 && mm_w >= 120 && mm_w <= 2500 && mm_h >= 80 && mm_h <= 1600) {
+                double diag_px = std::hypot(static_cast<double>(px_w), static_cast<double>(px_h));
+                double diag_in = std::hypot(static_cast<double>(mm_w) / 25.4, static_cast<double>(mm_h) / 25.4);
+                if (diag_in > 2.0) {
+                    int ppi = static_cast<int>(std::round(diag_px / diag_in));
+                    return std::max(72, std::min(360, ppi));
+                }
+            }
+        }
+    }
+    // Fallback to Windows logical monitor DPI
+    if (hwnd) {
+        UINT d = window_dpi(hwnd);
+        if (d >= 72) return std::max(72, std::min(360, static_cast<int>(d)));
+    }
+    HDC screen = GetDC(nullptr);
+    int log_dpi = screen ? GetDeviceCaps(screen, LOGPIXELSX) : 96;
+    if (screen) ReleaseDC(nullptr, screen);
+    return std::max(72, std::min(360, log_dpi > 0 ? log_dpi : 96));
+}
+
+inline void play_notification_sound_async(const std::string& preset) {
+    if (preset == "none") return;
+    const auto& wav = tc::sound::get_cached_pastel_wav(preset);
+    if (wav.empty()) return;
+    PlaySoundW(reinterpret_cast<LPCWSTR>(wav.data()), nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
 }
 
 inline void play_gentle_chime_async() {
-    // Synthesize a gentle two-tone sine chime (C5 -> G5) in memory once, zero external files
-    static std::vector<uint8_t> wav;
-    if (wav.empty()) {
-        const uint32_t rate = 22050;
-        const uint32_t num_samples = rate * 42 / 100; // 420ms
-        const uint32_t data_bytes = num_samples * 2;
-        const uint32_t file_size = 44 + data_bytes;
-        wav.resize(file_size, 0);
-        auto put32 = [&](size_t off, uint32_t v) {
-            wav[off] = v & 0xFF; wav[off + 1] = (v >> 8) & 0xFF;
-            wav[off + 2] = (v >> 16) & 0xFF; wav[off + 3] = (v >> 24) & 0xFF;
-        };
-        auto put16 = [&](size_t off, uint16_t v) {
-            wav[off] = v & 0xFF; wav[off + 1] = (v >> 8) & 0xFF;
-        };
-        memcpy(&wav[0], "RIFF", 4); put32(4, file_size - 8); memcpy(&wav[8], "WAVE", 4);
-        memcpy(&wav[12], "fmt ", 4); put32(16, 16); put16(20, 1); put16(22, 1);
-        put32(24, rate); put32(28, rate * 2); put16(32, 2); put16(34, 16);
-        memcpy(&wav[36], "data", 4); put32(40, data_bytes);
-        const double pi2 = 6.283185307179586;
-        for (uint32_t i = 0; i < num_samples; ++i) {
-            double t = static_cast<double>(i) / rate;
-            double note1 = std::sin(pi2 * 523.25 * t) * std::exp(-t * 7.5);
-            double t2 = std::max(0.0, t - 0.14);
-            double note2 = (t >= 0.14) ? std::sin(pi2 * 783.99 * t2) * std::exp(-t2 * 6.5) : 0.0;
-            double env_in = std::min(1.0, t / 0.015);
-            double sample = (note1 * 0.45 + note2 * 0.55) * env_in * 0.30;
-            int16_t pcm = static_cast<int16_t>(std::max(-32767.0, std::min(32767.0, sample * 32767.0)));
-            put16(44 + i * 2, static_cast<uint16_t>(pcm));
-        }
-    }
-    PlaySoundW(reinterpret_cast<LPCWSTR>(wav.data()), nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+    play_notification_sound_async("pastel_pearl");
 }
 
 inline int read_file_version_num(const std::wstring& exe_path) {
@@ -649,17 +684,22 @@ inline ReleaseCheckResult fetch_latest_github_release() {
     std::string html_url = doc.get("html_url").as_string();
     if (!html_url.empty()) res.release_url = html_url;
 
-    std::string msi_url, exe_url;
+    std::string msi_url, setup_exe_url, portable_exe_url;
     const auto& assets = doc.get("assets");
     if (assets.is_array()) {
         for (const auto& a : assets.arr) {
             std::string name = a.get("name").as_string();
             std::string dl = a.get("browser_download_url").as_string();
             if (name.size() >= 4 && name.substr(name.size() - 4) == ".msi") msi_url = dl;
-            else if (name.size() >= 4 && name.substr(name.size() - 4) == ".exe") exe_url = dl;
+            else if (name.size() >= 4 && name.substr(name.size() - 4) == ".exe") {
+                if (name.find("setup") != std::string::npos || name.find("Setup") != std::string::npos) setup_exe_url = dl;
+                else portable_exe_url = dl;
+            }
         }
     }
-    res.download_url = !msi_url.empty() ? msi_url : (!exe_url.empty() ? exe_url : res.release_url);
+    res.download_url = !msi_url.empty() ? msi_url
+                     : (!setup_exe_url.empty() ? setup_exe_url
+                     : (!portable_exe_url.empty() ? portable_exe_url : res.release_url));
     res.ok = !res.latest_version.empty();
     return res;
 }

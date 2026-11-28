@@ -47,11 +47,16 @@ assert.strictEqual(i18nFa.isRtl, true);
 assert.strictEqual(i18nFa.t('page.overview'), 'نمای کلی');
 assert.strictEqual(i18nFa.t('page.apps'), 'برنامه‌ها');
 
-// 3. Themes, Keyboard, History, Shortcuts catalog sanity
+// 3. Themes (Light + Dark), Keyboard, History, Shortcuts catalog sanity
 for (const name of ['blue', 'teal', 'violet', 'graphite']) {
-  const th = T.get(name);
-  assert(th && th.accent && th.mouse, `Theme ${name} missing fields`);
+  const thLight = T.get(name, false);
+  const thDark = T.get(name, true);
+  assert(thLight && thLight.accent && thLight.mouse, `Theme ${name} light missing fields`);
+  assert(thDark && thDark.accent && thDark.dark === true && thDark.background !== thLight.background, `Theme ${name} dark missing fields`);
 }
+assert.strictEqual(T.resolveDark('dark', false), true);
+assert.strictEqual(T.resolveDark('light', true), false);
+assert.strictEqual(T.resolveDark('system', true), true);
 const kdist = K.distribution({ physical: [{ code: 0, count: 100 }, { code: 49, count: 250 }] }, 'history', 'compact');
 assert(kdist.total === 350, 'Keyboard distribution total mismatch');
 const parts = C.chordParts({ modifiers: 1, key: 8 });
@@ -59,10 +64,10 @@ assert.deepStrictEqual(parts, ['Ctrl', 'C']);
 const scale = H.countScale(1250);
 assert(scale.ceiling >= 1250 && scale.ticks.length >= 2);
 
-// 4. index.html required sections, version 1.1.0 & asset integrity
+// 4. index.html required sections, version 1.2.0 & asset integrity
 const html = fs.readFileSync(path.join(uiDir, 'index.html'), 'utf8');
 assert(!html.includes('ClickPulse'), 'Found leftover ClickPulse string in index.html');
-assert(html.includes('>1.1.0<'), 'Expected sidebar version 1.1.0 in index.html');
+assert(html.includes('>1.2.0<'), 'Expected sidebar version 1.2.0 in index.html');
 assert(html.includes('jalali.js'), 'index.html must load jalali.js');
 for (const id of [
   'overview', 'history', 'keys', 'apps', 'typingtest', 'typingtest-nav', 'shortcuts', 'share', 'settings',
@@ -72,6 +77,8 @@ for (const id of [
   'tc-stealth-enter', 'tc-wake-hotkey-select', 'tc-startup-mode-select',
   'tc-typing-test-switch', 'tc-typing-test-stats-switch', 'tc-ergo-insights-switch',
   'tc-ergo-guard-switch', 'tc-smart-alerts-switch', 'tc-sound-alerts-switch',
+  'tc-sound-select', 'tc-sound-preset-row', 'tc-sound-preview',
+  'color-mode-select', 'tc-dpi-auto-switch', 'tc-dpi-detect-btn', 'tc-dpi-detected', 'tc-dpi-row',
   'tc-app-exclusions-switch', 'tc-pause-excluded-switch', 'tc-idle-detection-switch',
   'tc-idle-timeout-select', 'tc-jalali-switch', 'sport-enabled', 'automatic-updates',
   'reset-storage-directory', 'tc-export-csv', 'tc-export-json', 'tc-backup-now', 'language-select',
@@ -213,6 +220,8 @@ for (const id of [
   'share-card-next', 'share-prev-name', 'share-next-name', 'share-stage', 'share-canvas',
   'share-deck-prev', 'share-deck-next', 'share-deck-dots', 'share-empty',
   'personalization-settings', 'sport-visible', 'tc-daily-goal-input', 'tc-dpi-input',
+  'tc-dpi-auto-switch', 'tc-dpi-detect-btn', 'tc-dpi-detected', 'tc-dpi-row',
+  'tc-sound-preset-row', 'tc-sound-preview',
   'handoff-settings', 'handoff-description', 'takeover', 'capture-settings',
   'permission-row', 'permission-description', 'permission-reset-settings',
   'settings-permission', 'ignore-software-row', 'ignore-software-input', 'tc-track-apps-switch',
@@ -231,6 +240,8 @@ for (const id of [
 ]) makeEl(id);
 
 makeEl('theme-select', 'select', ['blue', 'teal', 'violet', 'graphite']);
+makeEl('color-mode-select', 'select', ['system', 'light', 'dark']);
+makeEl('tc-sound-select', 'select', ['pastel_pearl', 'mist_chime', 'peach_marimba', 'lavender_harp', 'mint_dew', 'silk_breeze', 'none']);
 makeEl('ui-scale-select', 'select', ['80', '90', '100', '115', '130', '150']);
 makeEl('language-select', 'select', ['en', 'fa', 'system']);
 makeEl('today-period-select', 'select', ['calendar_day', 'rolling_24h']);

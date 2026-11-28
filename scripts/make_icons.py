@@ -170,12 +170,35 @@ def write_ico(path, sizes=(16, 24, 32, 48, 64, 128, 256)):
         f.write(header + bytes(entries) + bytes(payload))
 
 
+def write_icns(path):
+    # macOS .icns container embedding PNG-compressed icon slots:
+    # icp6 (64x64), ic07 (128x128), ic08 (256x256), ic09 (512x512)
+    slots = [
+        (b"icp6", 64),
+        (b"ic07", 128),
+        (b"ic08", 256),
+        (b"ic09", 512),
+    ]
+    chunks = bytearray()
+    for tag, sz in slots:
+        png = encode_png_bytes(sz, sz, render_icon(sz))
+        chunks.extend(tag)
+        chunks.extend(struct.pack(">I", 8 + len(png)))
+        chunks.extend(png)
+    total_len = 8 + len(chunks)
+    with open(path, "wb") as f:
+        f.write(b"icns" + struct.pack(">I", total_len) + bytes(chunks))
+
+
 def main():
     os.makedirs("assets", exist_ok=True)
     mark = render_icon(128)
     write_png("assets/typecount-mark.png", 128, 128, mark)
+    write_png("ui/typecount-mark.png", 128, 128, mark)
+    write_png("assets/typecount-256.png", 256, 256, render_icon(256))
     write_ico("assets/typecount.ico")
-    print("Generated assets/typecount-mark.png and assets/typecount.ico")
+    write_icns("assets/typecount.icns")
+    print("Generated assets/typecount-mark.png, assets/typecount-256.png, assets/typecount.ico, and assets/typecount.icns")
 
 
 if __name__ == "__main__":

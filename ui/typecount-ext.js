@@ -359,12 +359,14 @@
     setVal('tc-daily-goal-input', v.daily_goal || 8000);
     setVal('tc-break-interval-select', String(v.break_interval_min ?? 45));
     setVal('tc-dpi-input', v.dpi_ppi || 96);
-    setVal('tc-idle-timeout-select', String(v.idle_timeout_sec ?? 90));
+    setVal('tc-idle-timeout-select', String(v.idle_timeout_sec ?? 180));
+    setVal('tc-sound-select', v.notification_sound || 'pastel_pearl');
 
     setChk('sport-enabled', v.sport_enabled === true);
     setChk('tc-jalali-switch', v.jalali_calendar === true);
     setChk('tc-typing-test-switch', v.typing_test_enabled !== false);
     setChk('tc-ergo-insights-switch', v.ergo_insights_enabled !== false);
+    setChk('tc-dpi-auto-switch', v.dpi_auto !== false);
     setChk('tc-track-apps-switch', v.track_apps !== false);
     setChk('tc-app-exclusions-switch', v.app_exclusions_enabled !== false);
     setChk('tc-pause-excluded-switch', v.pause_in_excluded_apps === true);
@@ -375,11 +377,22 @@
     setChk('tc-sound-alerts-switch', v.sound_alerts_enabled !== false);
     setChk('tc-auto-backup-switch', v.auto_backup !== false);
 
+    const detectedBadge = $('tc-dpi-detected');
+    if (detectedBadge) {
+      const detPpi = Number(v.detected_dpi || v.dpi_ppi || 96);
+      detectedBadge.textContent = `${n(detPpi)} PPI`;
+    }
+    const dpiRow = $('tc-dpi-row');
+    if (dpiRow) dpiRow.hidden = (v.dpi_auto !== false);
+
+    const soundPresetRow = $('tc-sound-preset-row');
+    if (soundPresetRow) soundPresetRow.hidden = (v.sound_alerts_enabled === false);
+
     const idleRow = $('tc-idle-timeout-row');
     if (idleRow) idleRow.hidden = (v.idle_detection_enabled === false);
 
     if (window.ClickPulseDropdowns?.sync) {
-      for (const id of ['tc-startup-mode-select', 'tc-wake-hotkey-select', 'tc-break-interval-select', 'tc-idle-timeout-select']) {
+      for (const id of ['tc-startup-mode-select', 'tc-wake-hotkey-select', 'tc-break-interval-select', 'tc-idle-timeout-select', 'tc-sound-select']) {
         window.ClickPulseDropdowns.sync(id);
       }
     }
@@ -463,7 +476,9 @@
     $('tc-daily-goal-input')?.addEventListener('change', e => commitNumberInput(e.target, 500, 500000, 8000, 'daily_goal', 'goal'));
     $('tc-daily-goal-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     $('tc-break-interval-select')?.addEventListener('change', e => send('break_interval', { minutes: Number(e.target.value) || 0 }));
-    $('tc-dpi-input')?.addEventListener('change', e => commitNumberInput(e.target, 72, 320, 96, 'dpi_ppi', 'ppi'));
+    $('tc-dpi-auto-switch')?.addEventListener('change', e => send('dpi_auto', { enabled: e.target.checked }));
+    $('tc-dpi-detect-btn')?.addEventListener('click', () => send('detect_dpi'));
+    $('tc-dpi-input')?.addEventListener('change', e => commitNumberInput(e.target, 72, 360, 96, 'dpi_ppi', 'ppi'));
     $('tc-dpi-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     $('tc-track-apps-switch')?.addEventListener('change', e => send('track_apps', { enabled: e.target.checked }));
     $('tc-auto-backup-switch')?.addEventListener('change', e => send('auto_backup', { enabled: e.target.checked }));
@@ -474,10 +489,12 @@
     $('tc-ergo-guard-switch')?.addEventListener('change', e => send('ergo_guard_enabled', { enabled: e.target.checked }));
     $('tc-smart-alerts-switch')?.addEventListener('change', e => send('smart_alerts_enabled', { enabled: e.target.checked }));
     $('tc-sound-alerts-switch')?.addEventListener('change', e => send('sound_alerts_enabled', { enabled: e.target.checked }));
+    $('tc-sound-select')?.addEventListener('change', e => send('notification_sound', { sound: e.target.value }));
+    $('tc-sound-preview')?.addEventListener('click', () => send('preview_sound', { sound: $('tc-sound-select')?.value || 'pastel_pearl' }));
     $('tc-app-exclusions-switch')?.addEventListener('change', e => send('app_exclusions_enabled', { enabled: e.target.checked }));
     $('tc-pause-excluded-switch')?.addEventListener('change', e => send('pause_in_excluded_apps', { enabled: e.target.checked }));
     $('tc-idle-detection-switch')?.addEventListener('change', e => send('idle_detection_enabled', { enabled: e.target.checked }));
-    $('tc-idle-timeout-select')?.addEventListener('change', e => send('idle_timeout_sec', { seconds: Number(e.target.value) || 90 }));
+    $('tc-idle-timeout-select')?.addEventListener('change', e => send('idle_timeout_sec', { seconds: Number(e.target.value) || 180 }));
 
     $('tc-export-csv')?.addEventListener('click', () => send('export_csv'));
     $('tc-export-json')?.addEventListener('click', () => send('export_json'));

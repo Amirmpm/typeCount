@@ -17,6 +17,9 @@
 .shortcut-chord kbd.mod-ctrl {background:#e8f6f3;color:#0f6b63;border-color:#bfe2db;border-bottom-color:#98cec3}
 .shortcut-chord kbd.mod-alt {background:#fef4e4;color:#9a4c0b;border-color:#efd2a7;border-bottom-color:#dfb678}
 .shortcut-chord kbd.mod-shift {background:#f2ecfe;color:#5f2bc2;border-color:#d8c7f7;border-bottom-color:#bca3ee}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-ctrl {background:#103832;color:#72e0cd;border-color:#1e5b51;border-bottom-color:#14443c}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-alt {background:#3b2711;color:#f6bc73;border-color:#613f1c;border-bottom-color:#492e14}
+html[data-color-scheme="dark"] .shortcut-chord kbd.mod-shift {background:#2b1e48;color:#c7a8ff;border-color:#4b357d;border-bottom-color:#38275e}
 .shortcut-annotation {display:grid;gap:4px;line-height:1.5;justify-items:start}
 .shortcut-annotation strong {font-size:1.3rem;font-weight:600;color:var(--text)}
 .shortcut-annotation small {color:var(--muted);font-size:1.05rem;line-height:1.5}
