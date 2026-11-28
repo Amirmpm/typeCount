@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/json.hpp"
+#include "../core/preferences.hpp"
 #include "../core/sound_synth.hpp"
 #include "../core/version.hpp"
 
@@ -368,7 +369,8 @@ inline void play_pastel_wav(const std::string& preset) {
     std::filesystem::path snd_dir = std::filesystem::path(cache_dir()) / "sounds";
     std::error_code ec;
     std::filesystem::create_directories(snd_dir, ec);
-    std::filesystem::path wav_path = snd_dir / (tc::sound::normalize_preset(preset) + ".wav");
+    std::string safe_preset = (tc::Preferences::is_valid_sound(preset) && preset != "none") ? preset : "pastel_pearl";
+    std::filesystem::path wav_path = snd_dir / (safe_preset + ".wav");
     if (!std::filesystem::exists(wav_path, ec) || std::filesystem::file_size(wav_path, ec) != wav.size()) {
         std::ofstream out(wav_path, std::ios::binary | std::ios::trunc);
         if (!out) return;
