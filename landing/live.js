@@ -82,9 +82,18 @@
 
   /* ---------- subscribers / notify ---------- */
   var subs = [];
+  var lightSubs = [];
   var notifyQueued = false;
+  var lightQueued = false;
+  var wasTyping = false;
   var cache = null;
-  function invalidate() { cache = null; }
+  var lightCache = null;
+  function invalidate() { cache = null; lightCache = null; }
+
+  function dispatch(list) {
+    var snap = lightCache || snapshot();
+    list.forEach(function (fn) { try { fn(snap); } catch (e) { /* ignore */ } });
+  }
   function notify() {
     invalidate();
     if (notifyQueued) return;
@@ -92,7 +101,21 @@
     var run = function () {
       notifyQueued = false;
       var snap = snapshot();
+      cache = snap;
       subs.forEach(function (fn) { try { fn(snap); } catch (e) { /* ignore */ } });
+    };
+    if (window.requestAnimationFrame) requestAnimationFrame(run); else setTimeout(run, 60);
+  }
+  /* Light refresh: recompute only the cheap live values. Heavier aggregates
+     (week/all/hours/series/calendar) are reused from the last full snapshot. */
+  function notifyLight() {
+    lightCache = null;
+    if (lightQueued) return;
+    lightQueued = true;
+    var run = function () {
+      lightQueued = false;
+      var snap = liveSnapshot();
+      lightSubs.forEach(function (fn) { try { fn(snap); } catch (e) { /* ignore */ } });
     };
     if (window.requestAnimationFrame) requestAnimationFrame(run); else setTimeout(run, 60);
   }
@@ -317,9 +340,43 @@
     return cache;
   }
 
+  /* Cheap snapshot: only re-measures WPM/idle/session/today counters and reuses
+     every aggregate from the last full snapshot. */
+  function liveSnapshot() {
+    if (lightCache) return lightCache;
+    var base = cache || snapshot();
+    var day = state.days[dateKey()] || emptyDay();
+    var now = Date.now();
+    var wpm = currentWpm(now);
+    var idle = !lastInput || now - lastInput > IDLE_MS;
+    lightCache = {
+      today: { k: day.k, c: day.c, s: day.s, m: day.m },
+      wpm: idle ? 0 : wpm,
+      cpm: (idle ? 0 : wpm) * 5,
+      idle: idle,
+      lastHourKeys: lastHourKeys(),
+      streak: base.streak,
+      peakWpm: Math.round(day.pk || 0),
+      week: base.week,
+      all: base.all,
+      hours: base.hours,
+      series7: base.series7,
+      series30: base.series30,
+      calendar: base.calendar,
+      session: {
+        k: session.k, c: session.c, s: session.s, m: session.m,
+        seconds: Math.round((now - session.start) / 1000),
+      },
+      storageOK: !memoryOnly,
+      partial: true,
+    };
+    return lightCache;
+  }
+
   /* ---------- public API ---------- */
   window.TypeCountLive = {
     subscribe: function (fn) { subs.push(fn); fn(snapshot()); return function () { subs = subs.filter(function (f) { return f !== fn; }); }; },
+    subscribeLive: function (fn) { lightSubs.push(fn); return function () { lightSubs = lightSubs.filter(function (f) { return f !== fn; }); }; },
     snapshot: snapshot,
     reset: function () {
       state = { v: 1, days: {} };
@@ -333,6 +390,15 @@
 
   prune();
   notify();
-  setInterval(function () { notify(); }, 1000); // keeps WPM/idle fresh while idle
+
+  /* Lightweight ticker: only refreshes live values (WPM/idle/session), never
+     rebuilds the chart or the heatmap. Runs at 4 Hz, and drops to zero work
+     when the tab is hidden or the user has been idle. */
+  setInterval(function () {
+    if (document.visibilityState !== "visible") return;
+    if (lastInput && Date.now() - lastInput > IDLE_MS && !wasTyping) return;
+    wasTyping = !!(lastInput && Date.now() - lastInput <= IDLE_MS);
+    notifyLight();
+  }, 250);
   window.addEventListener("beforeunload", function () { flushPx(); persist(true); });
 })();

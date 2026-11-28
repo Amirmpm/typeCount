@@ -274,7 +274,7 @@ kbd{
 .hl-wpm-unit{font-size:.85rem;font-weight:700;color:var(--faint);letter-spacing:.06em}
 
 .hl-meter{margin:.85rem 0 1.15rem;height:5px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
-.hl-meter span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .4s var(--ease)}
+.hl-meter span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .6s cubic-bezier(.4,0,.2,1);will-change:width}
 
 .hl-rows{display:grid;gap:.1rem}
 .hl-row{display:flex;justify-content:space-between;align-items:baseline;padding:.44em 0;font-size:.85rem;color:var(--muted)}
@@ -303,8 +303,16 @@ kbd{
   font-family:var(--mono);font-size:clamp(1.35rem,2.4vw,1.75rem);
   font-weight:700;letter-spacing:-.03em;color:var(--text);
   font-variant-numeric:tabular-nums;line-height:1.1;
+  display:flex;align-items:baseline;gap:.15em;
+  transition:color .3s var(--ease);
 }
-.stat-strip span{font-size:.78rem;color:var(--muted)}
+.stat-strip > li:first-child strong{color:var(--accent-hi)}
+.stat-strip li > span{font-size:.78rem;color:var(--muted)}
+.stat-unit{font-size:.62em;font-weight:600;color:var(--faint);letter-spacing:0}
+
+/* live value flash: a soft accent pulse whenever a number is actively moving */
+.hero-live .hl-wpm-value.is-live{color:var(--accent-hi);text-shadow:0 0 24px rgba(79,134,247,.45)}
+.hl-wpm-value,.wpm-value,.kpi-value,.hl-row strong,.stat-strip strong{transition:color .35s var(--ease)}
 
 /* ══════════ SECTION HEAD ══════════ */
 .section-head{max-width:660px;margin:0 auto clamp(34px,4.5vw,52px);text-align:center}
@@ -475,7 +483,7 @@ kbd{
 
 /* progress track */
 .track{height:7px;border-radius:99px;background:rgba(0,0,0,.44);overflow:hidden;margin:.55rem 0 .5rem;border:1px solid var(--line-soft)}
-.fill{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .55s var(--ease)}
+.fill{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .8s cubic-bezier(.4,0,.2,1);will-change:width}
 .fill.warn{background:linear-gradient(90deg,var(--warn),#f97316)}
 .fill.err{background:linear-gradient(90deg,var(--err),#e11d48)}
 

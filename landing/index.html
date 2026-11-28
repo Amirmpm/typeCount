@@ -134,13 +134,25 @@
     </aside>
   </div>
 
-  <!-- stats strip -->
+  <!-- stats strip — real counters from this page -->
   <div class="shell">
     <ul class="stat-strip">
-      <li><strong data-count="3">0</strong><span>operating systems</span></li>
-      <li><strong data-count="9">0</strong><span>languages</span></li>
-      <li><strong data-count="365" data-suffix="">0</strong><span>day calendar</span></li>
-      <li><strong data-count="0" data-suffix=" KB">0</strong><span>data sent out</span></li>
+      <li>
+        <strong id="statKeys" data-v="0">0</strong>
+        <span>keystrokes counted</span>
+      </li>
+      <li>
+        <strong id="statClicks" data-v="0">0</strong>
+        <span>clicks counted</span>
+      </li>
+      <li>
+        <strong id="statScrolls" data-v="0">0</strong>
+        <span>scrolls counted</span>
+      </li>
+      <li>
+        <strong><span id="statMetres" data-v="0">0.0</span><span class="stat-unit">m</span></strong>
+        <span>cursor travel</span>
+      </li>
     </ul>
   </div>
 </header>
