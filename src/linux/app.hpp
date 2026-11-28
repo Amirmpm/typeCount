@@ -72,7 +72,6 @@ public:
             prefs_.jalali_calendar = (effective_locale() == "fa");
         }
         engine_.set_idle_timeout_sec(prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180);
-        if (prefs_.autostart) set_autostart_enabled(true);
 
         gtk_init(&argc, &argv);
 

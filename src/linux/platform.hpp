@@ -431,7 +431,7 @@ inline bool signal_existing_instance() {
     bool ok = (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) == 0);
     if (ok) {
         const char msg[] = "SHOW\n";
-        (void)write(fd, msg, sizeof(msg) - 1);
+        if (write(fd, msg, sizeof(msg) - 1) < 0) {}
     }
     close(fd);
     return ok;
@@ -477,7 +477,7 @@ inline UpdateCheckResult check_github_release() {
     std::string tag = root.get("tag_name").as_string();
     res.latest_version = (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) ? tag.substr(1) : tag;
     res.latest_num = parse_version_num(res.latest_version);
-    res.release_url = root.get("html_url").as_string("https://github.com/Amirmpm/typeCount/releases");
+    res.release_url = root.get("html_url").as_string_or("https://github.com/Amirmpm/typeCount/releases");
     res.notes = root.get("body").as_string();
 
     std::string deb_url, tar_url;
@@ -497,15 +497,5 @@ inline UpdateCheckResult check_github_release() {
     res.update_available = res.ok && (res.latest_num > TC_VERSION_NUM);
     return res;
 }
-
-#ifdef None
-#undef None
-#endif
-#ifdef Status
-#undef Status
-#endif
-#ifdef Success
-#undef Success
-#endif
 
 } // namespace tc::linux_host

@@ -369,7 +369,6 @@ inline int parse_version_num(const std::string& v) {
         prefs_.jalali_calendar = ([self effectiveLocale] == "fa");
     }
     engine_->set_idle_timeout_sec(prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180);
-    if (prefs_.autostart) set_autostart_enabled_mac(true);
     wake_hotkey_ = parse_mac_hotkey(prefs_.wake_hotkey);
     system_dark_ = is_macos_dark();
 
@@ -624,7 +623,7 @@ inline int parse_version_num(const std::string& v) {
     if (prefs_.close_action == "hide") { [self hideMainWindow:false]; return NO; }
     if (prefs_.close_action == "stealth") { [self hideMainWindow:true]; return NO; }
     if (prefs_.close_action == "quit") { quitting_ = true; [NSApp terminate:nil]; return YES; }
-    [self evalJS:@"window.requestClose&&window.requestClose();"];
+    [self evalJS:"window.requestClose&&window.requestClose();"];
     return NO;
 }
 
@@ -1114,7 +1113,7 @@ static CGEventRef mac_cg_tap_callback(CGEventTapProxy proxy, CGEventType type, C
             std::string tag = root.get("tag_name").as_string();
             std::string ver = (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) ? tag.substr(1) : tag;
             int num = parse_version_num(ver);
-            std::string rel_url = root.get("html_url").as_string("https://github.com/Amirmpm/typeCount/releases");
+            std::string rel_url = root.get("html_url").as_string_or("https://github.com/Amirmpm/typeCount/releases");
             std::string dmg_url, zip_url;
             const auto& assets = root.get("assets");
             if (assets.is_array()) {

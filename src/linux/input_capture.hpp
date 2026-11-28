@@ -125,7 +125,7 @@ public:
         running_.store(false);
         if (wake_pipe_[1] >= 0) {
             char b = 'Q';
-            (void)write(wake_pipe_[1], &b, 1);
+            if (write(wake_pipe_[1], &b, 1) < 0) {}
         }
         if (thread_.joinable()) thread_.join();
         if (wake_pipe_[0] >= 0) { close(wake_pipe_[0]); wake_pipe_[0] = -1; }
@@ -140,7 +140,7 @@ public:
         }
         if (wake_pipe_[1] >= 0) {
             char b = 'H';
-            (void)write(wake_pipe_[1], &b, 1);
+            if (write(wake_pipe_[1], &b, 1) < 0) {}
         }
     }
 
@@ -155,7 +155,7 @@ private:
 
     static bool is_x11_key_down(Display* dpy, KeySym sym, const char keymap[32]) {
         KeyCode kc = XKeysymToKeycode(dpy, sym);
-        if (!kc || kc >= 256) return false;
+        if (!kc) return false;
         return (keymap[kc / 8] & (1 << (kc % 8))) != 0;
     }
 
