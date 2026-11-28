@@ -4,17 +4,17 @@
 
 ## Download (`v1.2.0`)
 
-Get the latest packages for **Windows**, **macOS**, and **Linux** from the **[GitHub Releases](https://github.com/Amirmpm/typeCount/releases/latest)** page:
-
-| Platform | Package | Best For | Details |
-|---|---|---|---|
-| **Windows (x64)** | **`TypeCount-v1.2.0-windows-x64-setup.msi`** | Standard Windows Installer | MSI setup with in-place upgrade detection, Start Menu & Desktop shortcuts, and Apps & Features uninstaller |
-| **Windows (x64)** | **`TypeCount-v1.2.0-windows-x64-setup.exe`** | Interactive Setup Wizard (EN / فارسی) | DPI-scaled 4-step bilingual setup wizard with OS dark mode, `< Back` navigation, in-place upgrades, and clean uninstaller |
-| **Windows (x64)** | **`TypeCount-v1.2.0-windows-x64-portable.exe`** | Portable Executable | Single standalone binary for Windows 10/11 (x64) with zero installation required |
-| **macOS (Universal)** | **`TypeCount-v1.2.0-macos-universal-setup.dmg`** | macOS Installer Disk Image | Drag-to-Applications `.dmg` containing Universal (`arm64` Apple Silicon + `x86_64` Intel) `TypeCount.app` |
-| **macOS (Universal)** | **`TypeCount-v1.2.0-macos-universal-portable.zip`** | Portable App Bundle | Signed Universal `TypeCount.app` archive for macOS 11+ |
-| **Linux (x64)** | **`TypeCount-v1.2.0-linux-x64-setup.deb`** | Debian / Ubuntu Package | System-wide install (`/usr/bin/typecount`, desktop launcher, hicolor icon) |
-| **Linux (x64)** | **`TypeCount-v1.2.0-linux-x64-portable.tar.gz`** | Portable Archive | Standalone `typecount` binary with optional user `install.sh` / `uninstall.sh` scripts |
+> **Latest Release: [`v1.2.0`](https://github.com/Amirmpm/typeCount/releases/tag/v1.2.0)** · Pick your operating system below for a direct download, or browse all assets on **[GitHub Releases](https://github.com/Amirmpm/typeCount/releases/latest)**.
+>
+> | Platform | Type | Direct Download | Size | Details |
+> |---|---|---|---|---|
+> | **Windows (x64)** | Standard Installer (`.msi`) | [**Download `.msi`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.msi) | `1.49 MB` | MSI installer with in-place upgrade detection, shortcuts & Apps & Features uninstaller |
+> | **Windows (x64)** | Setup Wizard (`.exe`) | [**Download Setup `.exe`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-setup.exe) | `2.42 MB` | DPI-scaled 4-step bilingual wizard (EN / فارسی) with dark mode & clean uninstaller |
+> | **Windows (x64)** | Portable (`.exe`) | [**Download Portable `.exe`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-windows-x64-portable.exe) | `2.17 MB` | Single standalone binary for Windows 10/11 (x64), zero installation required |
+> | **macOS (Universal)** | Disk Image (`.dmg`) | [**Download `.dmg`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-setup.dmg) | `2.51 MB` | Drag-to-Applications installer for Apple Silicon (`arm64`) & Intel (`x86_64`) |
+> | **macOS (Universal)** | Portable Bundle (`.zip`) | [**Download `.zip`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-macos-universal-portable.zip) | `1.98 MB` | Signed Universal `TypeCount.app` archive for macOS 11+ |
+> | **Linux (x64)** | Debian / Ubuntu (`.deb`) | [**Download `.deb`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-setup.deb) | `851 KB` | System-wide install (`/usr/bin/typecount`, desktop launcher, hicolor icon) |
+> | **Linux (x64)** | Portable Archive (`.tar.gz`) | [**Download `.tar.gz`**](https://github.com/Amirmpm/typeCount/releases/download/v1.2.0/TypeCount-v1.2.0-linux-x64-portable.tar.gz) | `1003 KB` | Standalone `typecount` binary with optional user `install.sh` / `uninstall.sh` scripts |
 
 > **Requirements:** Windows 10/11 (`x64` with built-in Edge WebView2), macOS 11+ (`arm64` / `x86_64` with Accessibility / Input Monitoring permission), or Linux (`x64` with GTK3 + WebKit2GTK; X11 XInput2 or `input` group evdev).
 
