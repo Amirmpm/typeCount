@@ -1,136 +1,262 @@
-/* TypeCount landing — page interactions + live dashboard bound to real input.
- * The counting engine lives in live.js (window.TypeCountLive). Nothing here
- * invents numbers: every value comes from actual activity on this page.
+/* TypeCount landing — UI behaviour + live dashboard rendering.
+ * All numbers come from live.js (real measured input). Nothing is invented.
  */
 (function () {
   "use strict";
+
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
-  const fmt = (n) => Math.round(n || 0).toLocaleString("en-US");
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
   const Live = window.TypeCountLive;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- toast ---------- */
-  const toast = $("#toast");
+  /* ═════════ toast ═════════ */
+  const toastEl = $("#toast");
   let toastTimer;
-  function showToast(msg) {
-    if (!toast) return;
-    toast.textContent = msg;
-    toast.classList.add("show");
+  function toast(msg) {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.classList.add("is-shown");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+    toastTimer = setTimeout(() => toastEl.classList.remove("is-shown"), 3000);
   }
 
-  /* ---------- mobile nav ---------- */
+  /* ═════════ sticky nav + scroll progress + current section ═════════ */
+  const nav = $("#nav");
+  const progress = $("#scrollProgress");
+  const navLinks = $$("[data-navlink]");
+  const sections = navLinks
+    .map((a) => document.getElementById(a.getAttribute("href").slice(1)))
+    .filter(Boolean);
+
+  let rafPending = false;
+  function onScroll() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      const y = window.scrollY;
+      if (nav) nav.classList.toggle("is-stuck", y > 8);
+      if (progress) {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        progress.style.width = (max > 0 ? (y / max) * 100 : 0) + "%";
+      }
+      // highlight the section in view
+      let current = null;
+      const mark = y + window.innerHeight * 0.32;
+      sections.forEach((sec) => {
+        if (sec.offsetTop <= mark) current = sec.id;
+      });
+      navLinks.forEach((a) =>
+        a.classList.toggle("is-current", a.getAttribute("href") === "#" + current)
+      );
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  /* ═════════ mobile menu ═════════ */
   const burger = $("#burger");
-  burger.addEventListener("click", () => {
-    const open = $(".nav-links").classList.toggle("open");
+  const navLinksBox = $("#navLinks");
+  function setMenu(open) {
+    if (!burger || !navLinksBox) return;
+    navLinksBox.classList.toggle("is-open", open);
     burger.setAttribute("aria-expanded", String(open));
+    burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  }
+  if (burger) {
+    burger.addEventListener("click", () =>
+      setMenu(burger.getAttribute("aria-expanded") !== "true")
+    );
+  }
+  $$("#navLinks a").forEach((a) => a.addEventListener("click", () => setMenu(false)));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setMenu(false);
   });
-  $$(".nav-links a").forEach((a) => a.addEventListener("click", () => $(".nav-links").classList.remove("open")));
+  document.addEventListener("click", (e) => {
+    if (!navLinksBox || !burger) return;
+    if (burger.getAttribute("aria-expanded") !== "true") return;
+    if (navLinksBox.contains(e.target) || burger.contains(e.target)) return;
+    setMenu(false);
+  });
 
-  /* ---------- reveal on scroll ---------- */
-  const io = new IntersectionObserver(
-    (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }),
-    { threshold: 0.12 }
-  );
-  $$(".reveal").forEach((el) => io.observe(el));
+  /* ═════════ reveal on scroll ═════════ */
+  if (!reduceMotion && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) =>
+        entries.forEach((en) => {
+          if (!en.isIntersecting) return;
+          en.target.classList.add("is-in");
+          io.unobserve(en.target);
+        }),
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
+    );
+    $$(".reveal").forEach((el) => io.observe(el));
+  } else {
+    $$(".reveal").forEach((el) => el.classList.add("is-in"));
+  }
 
-  /* ============================================================
-     LIVE DASHBOARD
-     ============================================================ */
+  /* ═════════ elements ═════════ */
   const el = {
     mToday: $("#mToday"), mWeek: $("#mWeek"), mLife: $("#mLife"),
     mTodayDetail: $("#mTodayDetail"), mWeekDetail: $("#mWeekDetail"), mLifeDetail: $("#mLifeDetail"),
-    wpm: $("#liveWpm"), cpm: $("#liveCpm"), scroll: $("#liveScroll"), peak: $("#peakWpm"),
-    move: $("#liveMove"), session: $("#liveSession"),
+    wpm: $("#liveWpm"), cpm: $("#liveCpm"), session: $("#liveSession"),
+    scroll: $("#liveScroll"), move: $("#liveMove"), peak: $("#peakWpm"), state: $("#liveState"),
+    heroWpm: $("#heroWpm"), heroMeter: $("#heroMeter"), heroKeys: $("#heroKeys"),
+    heroClicks: $("#heroClicks"), heroMetres: $("#heroMetres"),
+    statKeys: $("#statKeys"), statClicks: $("#statClicks"),
+    statScrolls: $("#statScrolls"), statMetres: $("#statMetres"),
     odoNum: $("#odoNum"), odoBar: $("#odoBar"), odoNote: $("#odoNote"),
-    strainKeys: $("#strainKeys"), strainBadge: $("#strainBadge"), strainBar: $("#strainBar"), strainNote: $("#strainNote"),
-    chart: $("#hourlyChart"), donut: $("#donut"), donutLegend: $("#donutLegend"),
+    strainKeys: $("#strainKeys"), strainBadge: $("#strainBadge"),
+    strainBar: $("#strainBar"), strainNote: $("#strainNote"), streak: $("#streakValue"),
+    chart: $("#hourlyChart"), chartEmpty: $("#chartEmpty"), chartCaption: $("#chartCaption"),
+    donut: $("#donut"), donutLegend: $("#donutLegend"),
     heatmap: $("#heatmap"), calTotal: $("#calTotal"),
-    streak: $("#streakValue"), status: $("#captureStatus"),
+    status: $("#captureStatus"),
   };
 
-  let lastSnap = null;
-  let revealed = false;
+  /* ═════════ smooth number tweening ═════════
+     One rAF loop for every animated value. Values are eased toward their
+     target with exponential smoothing, so fast typing and wheel bursts look
+     fluid instead of jumping. Only visible panels are animated. */
+  const tweens = new Map();
+  let tweenRaf = 0;
 
-  function animateNumber(node, to) {
+  function tween(node, target, format) {
     if (!node) return;
-    const from = parseFloat(node.dataset.val || "0");
-    if (!revealed) { node.textContent = fmt(to); node.dataset.val = to; return; }
-    const t0 = performance.now(), dur = 500;
-    function step(t) {
-      const p = Math.min(1, (t - t0) / dur);
-      const v = from + (to - from) * (1 - Math.pow(1 - p, 3));
-      node.textContent = fmt(v);
-      if (p < 1) requestAnimationFrame(step);
-      else node.dataset.val = to;
+    const existing = tweens.get(node);
+    if (existing) {
+      existing.target = target;
+      existing.format = format || existing.format;
+      return;
     }
-    requestAnimationFrame(step);
+    tweens.set(node, {
+      target: target,
+      value: Number(node.dataset.v || 0),
+      format: format || fmt,
+      last: -1,
+    });
+    if (!tweenRaf) tweenRaf = requestAnimationFrame(stepTweens);
   }
 
-  function renderMetrics(s) {
-    animateNumber(el.mToday, s.today.k);
-    animateNumber(el.mWeek, s.week.k);
-    animateNumber(el.mLife, s.all.k);
-    if (el.mTodayDetail) el.mTodayDetail.textContent = fmt(s.today.c) + " clicks · " + fmt(s.today.s) + " scrolls · " + s.today.m.toFixed(1) + " m moved";
-    if (el.mWeekDetail) el.mWeekDetail.textContent = fmt(s.week.c) + " clicks · avg " + fmt(s.week.k / 7) + " keys/day";
-    if (el.mLifeDetail) el.mLifeDetail.textContent = fmt(s.all.c) + " clicks · " + fmt(s.all.days) + " active day" + (s.all.days === 1 ? "" : "s");
+  function stepTweens() {
+    tweenRaf = 0;
+    let active = false;
+    tweens.forEach((t, node) => {
+      if (!node.isConnected) { tweens.delete(node); return; }
+      const ease = reduceMotion ? 1 : 0.18;
+      t.value += (t.target - t.value) * ease;
+      if (Math.abs(t.target - t.value) < 0.01) t.value = t.target;
+      // write only when the rendered string actually changes
+      const text = t.format(t.value);
+      if (text !== node.textContent) node.textContent = text;
+      node.dataset.v = t.value;
+      if (t.value !== t.target) active = true;
+      else tweens.delete(node);
+    });
+    if (active) tweenRaf = requestAnimationFrame(stepTweens);
+  }
+
+  const int = (n) => fmt(n);
+  const dec1 = (n) => n.toFixed(1);
+  const dec2 = (n) => n.toFixed(2);
+
+  /* ═════════ render ═════════ */
+  function renderKpis(s) {
+    tween(el.mToday, s.today.k, int);
+    tween(el.mWeek, s.week.k, int);
+    tween(el.mLife, s.all.k, int);
+    if (el.mTodayDetail) {
+      el.mTodayDetail.textContent = s.today.k
+        ? `${fmt(s.today.c)} clicks · ${fmt(s.today.s)} scrolls · ${s.today.m.toFixed(1)} m moved`
+        : "no activity yet — start typing";
+    }
+    if (el.mWeekDetail) {
+      el.mWeekDetail.textContent = s.week.k
+        ? `${fmt(s.week.c)} clicks · avg ${fmt(s.week.k / 7)}/day`
+        : "no activity yet";
+    }
+    if (el.mLifeDetail) {
+      el.mLifeDetail.textContent = s.all.days
+        ? `${fmt(s.all.c)} clicks · ${fmt(s.all.days)} active day${s.all.days === 1 ? "" : "s"}`
+        : "no activity yet";
+    }
+  }
+
+  function renderHero(s) {
+    tween(el.heroWpm, s.wpm, dec1);
+    if (el.heroWpm) el.heroWpm.classList.toggle("is-live", !s.idle && s.wpm > 0);
+    if (el.heroMeter) el.heroMeter.style.width = Math.min(100, (s.wpm / 90) * 100) + "%";
+    tween(el.heroKeys, s.today.k, int);
+    tween(el.heroClicks, s.today.c, int);
+    tween(el.heroMetres, s.today.m, (n) => n.toFixed(1) + " m");
   }
 
   function renderLive(s) {
-    const wpm = s.wpm;
-    if (el.wpm) el.wpm.textContent = wpm.toFixed(1);
-    if (el.cpm) el.cpm.textContent = fmt(s.cpm) + " CPM";
-    if (el.scroll) el.scroll.textContent = fmt(s.session.s) + " scrolls this session";
-    if (el.peak) el.peak.textContent = "Peak today: " + fmt(s.peakWpm) + " WPM";
-    if (el.move) el.move.textContent = s.session.m.toFixed(1) + " m cursor travel";
+    tween(el.wpm, s.wpm, dec1);
+    tween(el.cpm, s.cpm, (n) => fmt(n) + " CPM");
+    if (el.peak) el.peak.textContent = "Peak " + fmt(s.peakWpm) + " WPM";
+    if (el.scroll) el.scroll.textContent = fmt(s.session.s);
+    tween(el.move, s.session.m, (n) => n.toFixed(1) + " m");
     if (el.session) {
-      const secs = s.session.seconds;
-      const mm = Math.floor(secs / 60), ss = secs % 60;
-      el.session.textContent = "Session " + mm + ":" + String(ss).padStart(2, "0") + " · " + fmt(s.session.k) + " keys · " + fmt(s.session.c) + " clicks";
+      const secs = s.session.seconds, mm = Math.floor(secs / 60), ss = secs % 60;
+      el.session.textContent = mm + ":" + String(ss).padStart(2, "0");
     }
-    const liveWrap = $("#liveStrip");
-    if (liveWrap) liveWrap.classList.toggle("is-idle", s.idle);
-    const state = $("#liveState");
-    if (state) {
-      state.textContent = !s.idle
+    if (el.state) {
+      el.state.textContent = !s.idle
         ? "typing — " + fmt(s.session.k) + " keys this session"
         : s.session.k || s.session.c || s.session.s
-          ? "idle · session total " + fmt(s.session.k) + " keys"
+          ? "idle · " + fmt(s.session.k) + " keys counted"
           : "waiting for input…";
     }
 
-    /* mouse odometer — real cursor distance, 500 m daily goal */
-    if (el.odoNum) el.odoNum.textContent = s.today.m < 1000 ? s.today.m.toFixed(1) + " m" : fmt(s.today.m) + " m";
-    if (el.odoBar) el.odoBar.style.width = Math.min(100, (s.today.m / 500) * 100) + "%";
-    if (el.odoNote) el.odoNote.textContent = "Goal: 500 m/day · streak: " + fmt(s.streak) + " day" + (s.streak === 1 ? "" : "s") + (s.streak > 0 ? " 🔥" : "");
+    /* stat strip — all-time, real */
+    tween(el.statKeys, s.all.k, int);
+    tween(el.statClicks, s.all.c, int);
+    tween(el.statScrolls, s.all.s, int);
+    tween(el.statMetres, s.all.m, (n) => (n < 100 ? n.toFixed(1) : fmt(n)));
 
-    /* strain guard from the real last-hour count */
-    if (el.strainKeys) el.strainKeys.textContent = fmt(s.lastHourKeys);
-    const lvl = s.lastHourKeys;
-    const strain = lvl > 6000 ? "high" : lvl > 3000 ? "moderate" : "low";
+    /* odometer */
+    if (el.odoNum) tween(el.odoNum, s.today.m, (n) => (n < 1000 ? n.toFixed(1) : fmt(n)) + " m");
+    if (el.odoBar) el.odoBar.style.width = Math.min(100, (s.today.m / 500) * 100) + "%";
+    if (el.odoNote) {
+      el.odoNote.textContent =
+        "Goal: 500 m/day · " + (s.streak ? fmt(s.streak) + " day streak 🔥" : "no streak yet");
+    }
+    if (el.streak) el.streak.textContent = fmt(s.streak);
+
+    /* strain guard */
+    const keys = s.lastHourKeys;
+    const level = keys > 6000 ? "err" : keys > 3000 ? "warn" : "ok";
+    if (el.strainKeys) el.strainKeys.textContent = fmt(keys);
     if (el.strainBadge) {
-      el.strainBadge.textContent = strain === "low" ? "Healthy" : strain === "moderate" ? "Watch it" : "Take a break";
-      el.strainBadge.className = "badge " + (strain === "low" ? "ok" : strain === "moderate" ? "warn" : "err");
+      el.strainBadge.textContent = level === "ok" ? "Healthy" : level === "warn" ? "Watch it" : "Take a break";
+      el.strainBadge.className = "chip chip-" + level;
     }
     if (el.strainBar) {
-      el.strainBar.className = "bar-fill" + (strain === "low" ? "" : " warn");
-      el.strainBar.style.width = Math.min(100, (lvl / 8000) * 100) + "%";
+      el.strainBar.className = "fill" + (level === "ok" ? "" : " " + level);
+      el.strainBar.style.width = Math.min(100, (keys / 8000) * 100) + "%";
     }
-    if (el.strainNote) el.strainNote.textContent = "Strain level: " + strain + " · " + (lvl === 0 ? "nothing logged this hour yet" : fmt(lvl) + " keys in the last hour");
+    if (el.strainNote) {
+      el.strainNote.textContent = keys
+        ? fmt(keys) + " keys this hour · level " + (level === "ok" ? "low" : level === "warn" ? "moderate" : "high")
+        : "Nothing logged this hour yet — start typing to see Strain Guard react.";
+    }
   }
 
-  /* ---------- hourly / daily chart ---------- */
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  let chartRange = "24h";
+  /* ═════════ chart ═════════ */
+  const NS = "http://www.w3.org/2000/svg";
+  let range = "24h";
 
-  function chartSeries(s) {
-    if (chartRange === "24h") {
-      return s.hours.map((h) => ({ label: String(h.hour).padStart(2, "0") + ":00", k: h.k, c: h.c }));
+  function series(s) {
+    if (range === "24h") {
+      return s.hours.map((h) => ({
+        label: String(h.hour).padStart(2, "0") + ":00",
+        k: h.k, c: h.c,
+      }));
     }
-    const n = chartRange === "7d" ? 7 : 30;
-    const src = chartRange === "7d" ? s.series7 : s.series30;
-    return src.slice(-n).map((d) => ({
+    const src = range === "7d" ? s.series7 : s.series30;
+    return src.map((d) => ({
       label: d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       k: d.k, c: d.c,
     }));
@@ -138,235 +264,356 @@
 
   function drawChart(s) {
     if (!el.chart) return;
-    const data = chartSeries(s);
-    const max = Math.max(10, ...data.map((d) => Math.max(d.k, d.c)));
-    const W = 560, H = 180, pad = 6, gap = 2;
-    const bw = (W - pad * 2) / data.length;
+    const data = series(s);
+    const max = Math.max(4, ...data.map((d) => Math.max(d.k, d.c)));
+    const W = 560, H = 176, padL = 2, padR = 2, baseLine = H - 16;
+    const bw = (W - padL - padR) / data.length;
 
+    el.chart.textContent = "";
     const tip = document.createElement("div");
     tip.className = "chart-tip";
-    el.chart.innerHTML = "";
     el.chart.appendChild(tip);
 
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.setAttribute("preserveAspectRatio", "none");
 
-    /* baseline */
-    const axis = document.createElementNS(SVG_NS, "line");
+    // gridlines
+    [0.33, 0.66].forEach((f) => {
+      const ln = document.createElementNS(NS, "line");
+      ln.setAttribute("x1", 0); ln.setAttribute("x2", W);
+      ln.setAttribute("y1", baseLine - (baseLine - 8) * f);
+      ln.setAttribute("y2", baseLine - (baseLine - 8) * f);
+      ln.setAttribute("stroke", "#1a2740");
+      ln.setAttribute("stroke-width", "1");
+      ln.setAttribute("stroke-dasharray", "3 5");
+      svg.appendChild(ln);
+    });
+
+    // baseline
+    const axis = document.createElementNS(NS, "line");
     axis.setAttribute("x1", 0); axis.setAttribute("x2", W);
-    axis.setAttribute("y1", H - 18); axis.setAttribute("y2", H - 18);
-    axis.setAttribute("stroke", "#23324d"); axis.setAttribute("stroke-width", 1);
+    axis.setAttribute("y1", baseLine); axis.setAttribute("y2", baseLine);
+    axis.setAttribute("stroke", "#22334e");
     svg.appendChild(axis);
 
-    const empty = data.every((d) => d.k === 0 && d.c === 0);
-
+    let empty = true;
     data.forEach((d, i) => {
-      const x = pad + i * bw;
-      const w = Math.max(2, bw - gap);
-      const hK = (d.k / max) * (H - 30);
-      const hC = (d.c / max) * (H - 30);
+      const x = padL + i * bw;
+      const w = Math.max(2, bw - 2);
       if (d.k > 0) {
-        const r = document.createElementNS(SVG_NS, "rect");
-        r.setAttribute("x", x); r.setAttribute("y", H - 18 - hK);
-        r.setAttribute("width", w); r.setAttribute("height", Math.max(2, hK));
-        r.setAttribute("rx", 2); r.setAttribute("fill", "#4f86f7");
+        empty = false;
+        const hK = Math.max(2, (d.k / max) * (baseLine - 8));
+        const r = document.createElementNS(NS, "rect");
+        r.setAttribute("x", x); r.setAttribute("y", baseLine - hK);
+        r.setAttribute("width", w); r.setAttribute("height", hK);
+        r.setAttribute("rx", Math.min(3, w / 2));
+        r.setAttribute("fill", "#4f86f7");
         r.setAttribute("class", "bar");
         svg.appendChild(r);
       }
       if (d.c > 0) {
-        const r2 = document.createElementNS(SVG_NS, "rect");
-        r2.setAttribute("x", x + w / 2 - Math.max(1, w / 4));
-        r2.setAttribute("y", H - 18 - hC);
-        r2.setAttribute("width", Math.max(1, w / 2));
-        r2.setAttribute("height", Math.max(1, hC));
-        r2.setAttribute("rx", 1); r2.setAttribute("fill", "#56c2f5");
-        r2.setAttribute("opacity", ".75");
+        empty = false;
+        const hC = Math.max(2, (d.c / max) * (baseLine - 8));
+        const r2 = document.createElementNS(NS, "rect");
+        r2.setAttribute("x", x + w * 0.28); r2.setAttribute("y", baseLine - hC);
+        r2.setAttribute("width", Math.max(1.5, w * 0.44)); r2.setAttribute("height", hC);
+        r2.setAttribute("rx", 1.5);
+        r2.setAttribute("fill", "#56c2f5"); r2.setAttribute("opacity", ".8");
         r2.setAttribute("class", "bar");
         svg.appendChild(r2);
       }
-      /* invisible hit area so hover works on empty bars too */
-      const hit = document.createElementNS(SVG_NS, "rect");
+
+      // hover hit area
+      const hit = document.createElementNS(NS, "rect");
       hit.setAttribute("x", x); hit.setAttribute("y", 0);
       hit.setAttribute("width", Math.max(2, bw)); hit.setAttribute("height", H);
       hit.setAttribute("fill", "transparent");
-      hit.addEventListener("mouseenter", (ev) => {
-        tip.textContent = d.label + " · " + fmt(d.k) + " keys · " + fmt(d.c) + " clicks";
+      hit.addEventListener("mouseenter", () => {
+        tip.textContent = `${d.label} · ${fmt(d.k)} keys · ${fmt(d.c)} clicks`;
         tip.style.opacity = "1";
-        const box = el.chart.getBoundingClientRect();
-        tip.style.left = Math.max(0, Math.min(box.width - 150, ev.clientX - box.left + 10)) + "px";
-        tip.style.top = Math.max(0, ev.clientY - box.top - 36) + "px";
+        const px = Math.min(92, Math.max(0, ((x + w / 2) / W) * 100));
+        tip.style.left = px + "%";
+        tip.style.top = "2px";
+        tip.style.transform = "translateX(-50%)";
       });
-      hit.addEventListener("mouseleave", () => (tip.style.opacity = "0"));
+      hit.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
       svg.appendChild(hit);
     });
 
     el.chart.appendChild(svg);
+    if (el.chartEmpty) el.chartEmpty.style.display = empty ? "grid" : "none";
 
-    const emptyMsg = $("#chartEmpty");
-    if (emptyMsg) emptyMsg.style.display = empty ? "flex" : "none";
-    const chartCaption = $("#chartCaption");
-    if (chartCaption) {
-      chartCaption.textContent = chartRange === "24h"
-        ? "Today, " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })
-        : chartRange === "7d" ? "Last 7 days" : "Last 30 days";
+    if (el.chartCaption) {
+      el.chartCaption.textContent =
+        range === "24h"
+          ? "Today, " + new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : range === "7d" ? "Last 7 days" : "Last 30 days";
     }
   }
 
-  /* ---------- donut: real activity mix ---------- */
+  /* ═════════ donut ═════════ */
   function drawDonut(s) {
     if (!el.donut) return;
     const k = s.today.k, c = s.today.c, sc = s.today.s;
     const total = k + c + sc;
-    const parts = total === 0
-      ? [{ label: "Keyboard", value: 0, color: "#4f86f7" },
-         { label: "Clicks", value: 0, color: "#56c2f5" },
-         { label: "Scrolls", value: 0, color: "#7cb0ff" }]
+    const pct = (v) => (total ? Math.round((v / total) * 100) : 0);
+    const kb = pct(k), cl = pct(c);
+    const parts = total
+      ? [
+          { label: "Keys", value: kb, color: "#4f86f7" },
+          { label: "Clicks", value: cl, color: "#56c2f5" },
+          { label: "Scrolls", value: Math.max(0, 100 - kb - cl), color: "#8ebcff" },
+        ]
       : [
-          { label: "Keyboard", value: Math.round((k / total) * 100), color: "#4f86f7" },
-          { label: "Clicks", value: Math.round((c / total) * 100), color: "#56c2f5" },
-          { label: "Scrolls", value: 100 - Math.round((k / total) * 100) - Math.round((c / total) * 100), color: "#7cb0ff" },
+          { label: "Keys", value: 0, color: "#4f86f7" },
+          { label: "Clicks", value: 0, color: "#56c2f5" },
+          { label: "Scrolls", value: 0, color: "#8ebcff" },
         ];
 
-    const cx = 75, cy = 75, r = 58, sw = 22;
+    const cx = 66, cy = 66, r = 50, sw = 18;
     const C = 2 * Math.PI * r;
-    let offset = 0;
-    const svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 150 150");
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 132 132");
 
-    const track = document.createElementNS(SVG_NS, "circle");
+    const track = document.createElementNS(NS, "circle");
     track.setAttribute("cx", cx); track.setAttribute("cy", cy); track.setAttribute("r", r);
-    track.setAttribute("fill", "none"); track.setAttribute("stroke", "#1b2842");
+    track.setAttribute("fill", "none"); track.setAttribute("stroke", "#182740");
     track.setAttribute("stroke-width", sw);
     svg.appendChild(track);
 
-    if (total > 0) {
+    let offset = 0;
+    if (total) {
       parts.forEach((p) => {
         if (p.value <= 0) return;
         const len = (p.value / 100) * C;
-        const arc = document.createElementNS(SVG_NS, "circle");
+        const arc = document.createElementNS(NS, "circle");
         arc.setAttribute("cx", cx); arc.setAttribute("cy", cy); arc.setAttribute("r", r);
-        arc.setAttribute("fill", "none"); arc.setAttribute("stroke", p.color);
+        arc.setAttribute("fill", "none");
+        arc.setAttribute("stroke", p.color);
         arc.setAttribute("stroke-width", sw);
-        arc.setAttribute("stroke-dasharray", (len - 3) + " " + (C - len + 3));
+        arc.setAttribute("stroke-linecap", "butt");
+        arc.setAttribute("stroke-dasharray", `${Math.max(0, len - 2)} ${C - len + 2}`);
         arc.setAttribute("stroke-dashoffset", -offset);
-        arc.setAttribute("transform", "rotate(-90 " + cx + " " + cy + ")");
+        arc.setAttribute("transform", `rotate(-90 ${cx} ${cy})`);
         svg.appendChild(arc);
         offset += len;
       });
     }
 
-    const t1 = document.createElementNS(SVG_NS, "text");
-    t1.setAttribute("x", cx); t1.setAttribute("y", cy + 2);
-    t1.setAttribute("text-anchor", "middle"); t1.setAttribute("fill", "#e6eefc");
-    t1.setAttribute("font-size", total ? "22" : "13"); t1.setAttribute("font-weight", "800");
+    const t1 = document.createElementNS(NS, "text");
+    t1.setAttribute("x", cx); t1.setAttribute("y", cy + (total ? 3 : 0));
+    t1.setAttribute("text-anchor", "middle");
+    t1.setAttribute("fill", "#eaf1ff");
+    t1.setAttribute("font-size", total ? "21" : "11");
+    t1.setAttribute("font-weight", "700");
     t1.textContent = total ? fmt(total) : "No input";
     svg.appendChild(t1);
-    const t2 = document.createElementNS(SVG_NS, "text");
-    t2.setAttribute("x", cx); t2.setAttribute("y", cy + 20);
-    t2.setAttribute("text-anchor", "middle"); t2.setAttribute("fill", "#90a4c2");
-    t2.setAttribute("font-size", "9");
-    t2.textContent = total ? "events today" : "yet today";
-    svg.appendChild(t2);
 
-    el.donut.innerHTML = "";
+    if (total) {
+      const t2 = document.createElementNS(NS, "text");
+      t2.setAttribute("x", cx); t2.setAttribute("y", cy + 17);
+      t2.setAttribute("text-anchor", "middle");
+      t2.setAttribute("fill", "#8ba0bf");
+      t2.setAttribute("font-size", "8.5");
+      t2.textContent = "events today";
+      svg.appendChild(t2);
+    }
+
+    el.donut.textContent = "";
     el.donut.appendChild(svg);
 
-    el.donutLegend.innerHTML = parts.map((p) =>
-      '<div><strong>' + p.value + '%</strong><span><i class="dot" style="background:' + p.color + '"></i>' + p.label + "</span></div>"
-    ).join("");
+    if (el.donutLegend) {
+      el.donutLegend.innerHTML = parts
+        .map(
+          (p) =>
+            `<div><strong>${p.value}%</strong><span><i class="dot" style="background:${p.color}"></i>${p.label}</span></div>`
+        )
+        .join("");
+    }
   }
 
-  /* ---------- 365-day calendar from real days ---------- */
+  /* ═════════ calendar ═════════ */
   function levelOf(k) {
     if (!k) return 0;
-    if (k < 200) return 1;
-    if (k < 800) return 2;
-    if (k < 2500) return 3;
+    if (k < 150) return 1;
+    if (k < 600) return 2;
+    if (k < 2000) return 3;
     return 4;
   }
   function drawCalendar(s) {
     if (!el.heatmap) return;
-    const cells = s.calendar;
     const frag = document.createDocumentFragment();
     let total = 0;
-    cells.forEach((d) => {
+    s.calendar.forEach((d) => {
       total += d.k;
       const cell = document.createElement("div");
-      cell.className = "heat-cell level-" + levelOf(d.k);
-      cell.title = d.date.toDateString() + " · " + fmt(d.k) + " keys · " + fmt(d.c) + " clicks";
+      cell.className = "heat-cell l" + levelOf(d.k);
+      cell.title = `${d.date.toDateString()} · ${fmt(d.k)} keys · ${fmt(d.c)} clicks`;
       frag.appendChild(cell);
     });
-    el.heatmap.innerHTML = "";
+    el.heatmap.textContent = "";
     el.heatmap.appendChild(frag);
-    if (el.calTotal) el.calTotal.textContent = fmt(total) + " keys in the last year";
-    if (el.streak) el.streak.textContent = fmt(s.streak);
+    if (el.calTotal) el.calTotal.textContent = fmt(total) + " keys this year";
   }
 
-  /* ---------- capture status line ---------- */
   function renderStatus(s) {
     if (!el.status) return;
+    el.status.textContent = s.storageOK ? "saved locally" : "storage blocked";
     el.status.classList.toggle("warn", !s.storageOK);
-    el.status.textContent = s.storageOK
-      ? "● Counting live · saved in this browser only"
-      : "● Counting live · this browser blocks storage, so numbers reset on reload";
+  }
+
+  /* Heavy render — throttled. Typing fires many events per second; rebuilding
+     the SVG chart on each one is what made the panel feel janky. Numbers update
+     immediately (tweened), while chart/donut redraw at most ~5x/second. */
+  const HEAVY_INTERVAL = 200;
+  let heavyTimer = 0;
+  let heavyPending = null;
+  let lastHeavy = 0;
+  let lastChartSig = "";
+
+  function chartSig(s) {
+    // hourly buckets for 24h, day buckets otherwise
+    if (range === "24h") return s.hours.map((h) => h.k + "/" + h.c).join(",");
+    const src = range === "7d" ? s.series7 : s.series30;
+    return src.map((d) => d.k + "/" + d.c).join(",");
+  }
+
+  function flushHeavy() {
+    heavyTimer = 0;
+    const s = heavyPending || Live.snapshot();
+    lastHeavy = performance.now();
+
+    const cs = chartSig(s);
+    if (cs !== lastChartSig) {
+      lastChartSig = cs;
+      drawChart(s);
+      drawDonut(s);
+    }
+  }
+
+  function scheduleHeavy(s) {
+    heavyPending = s;
+    if (heavyTimer) return;
+    const wait = Math.max(0, HEAVY_INTERVAL - (performance.now() - lastHeavy));
+    heavyTimer = setTimeout(flushHeavy, wait);
   }
 
   function render(s) {
-    lastSnap = s;
-    renderMetrics(s);
+    renderHero(s);
+    renderKpis(s);
     renderLive(s);
-    drawChart(s);
-    drawDonut(s);
-    drawCalendar(s);
     renderStatus(s);
+    scheduleHeavy(s);
   }
 
-  /* first paint, then subscribe */
-  render(Live.snapshot());
-  Live.subscribe((s) => render(s));
-  $("#simWindow").addEventListener("pointerdown", () => { revealed = true; }, { once: true });
-  setTimeout(() => { revealed = true; }, 800);
+  /* Calendar is expensive (364 nodes) — rebuilt only when a day value changes,
+     and never more than once per second. */
+  let lastCalSig = "";
+  let calTimer = 0;
+  function renderCalendar(s) {
+    const next = s.calendar.map((d) => d.k).join(",");
+    if (next === lastCalSig) return;
+    lastCalSig = next;
+    if (calTimer) return;
+    calTimer = setTimeout(() => {
+      calTimer = 0;
+      drawCalendar(Live.snapshot());
+    }, 1000);
+  }
 
-  /* range switcher */
-  $("#rangeSeg").addEventListener("click", (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-    $$("#rangeSeg button").forEach((b) => b.classList.remove("selected"));
-    btn.classList.add("selected");
-    chartRange = btn.dataset.range;
-    drawChart(Live.snapshot());
+  const first = Live.snapshot();
+  render(first);
+  renderCalendar(first);
+  Live.subscribe((s) => { render(s); renderCalendar(s); });
+  Live.subscribeLive((s) => { renderHero(s); renderKpis(s); renderLive(s); });
+
+  /* ═════════ tabs (proper ARIA + keyboard) ═════════ */
+  const tabs = $$('.tab[role="tab"]');
+  const panels = tabs.map((t) => document.getElementById(t.getAttribute("aria-controls")));
+
+  function selectTab(index, focus) {
+    tabs.forEach((t, i) => {
+      const on = i === index;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", String(on));
+      t.tabIndex = on ? 0 : -1;
+      if (panels[i]) {
+        panels[i].classList.toggle("is-active", on);
+        panels[i].hidden = !on;
+      }
+    });
+    if (focus) tabs[index].focus();
+  }
+
+  tabs.forEach((tab, i) => {
+    tab.tabIndex = i === 0 ? 0 : -1;
+    tab.addEventListener("click", () => selectTab(i));
+    tab.addEventListener("keydown", (e) => {
+      const keys = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity };
+      if (!(e.key in keys)) return;
+      e.preventDefault();
+      let next = keys[e.key] === Infinity ? tabs.length - 1
+               : keys[e.key] === -Infinity ? 0
+               : (i + keys[e.key] + tabs.length) % tabs.length;
+      selectTab(next, true);
+    });
   });
 
-  /* reset + export */
+  /* ═════════ chart range ═════════ */
+  const rangeSeg = $("#rangeSeg");
+  if (rangeSeg) {
+    rangeSeg.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-range]");
+      if (!btn) return;
+      $$("button", rangeSeg).forEach((b) => {
+        b.classList.toggle("is-active", b === btn);
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
+      range = btn.dataset.range;
+      lastChartSig = "";
+      drawChart(Live.snapshot());
+    });
+  }
+
+  /* ═════════ reset / export ═════════ */
   const resetBtn = $("#resetLive");
-  if (resetBtn) resetBtn.addEventListener("click", () => {
-    if (!confirm("Clear all activity counted in this browser? This cannot be undone.")) return;
-    Live.reset();
-    showToast("Activity cleared — counting starts fresh.");
-  });
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      if (!window.confirm("Clear all activity counted in this browser? This can't be undone.")) return;
+      Live.reset();
+      toast("Activity cleared — counting starts fresh.");
+    });
+  }
 
   const exportBtn = $("#exportLive");
-  if (exportBtn) exportBtn.addEventListener("click", () => {
-    const blob = new Blob([Live.exportJSON()], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "typecount-activity-" + new Date().toISOString().slice(0, 10) + ".json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-    showToast("Exported your local activity as JSON.");
-  });
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      const blob = new Blob([Live.exportJSON()], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "typecount-activity-" + new Date().toISOString().slice(0, 10) + ".json";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast("Exported your local activity as JSON.");
+    });
+  }
 
-  /* sidebar buttons — Overview only in this page */
-  $$("[data-nav]").forEach((b) => b.addEventListener("click", () => {
-    if (b.dataset.nav === "Overview") return;
-    showToast(b.dataset.nav + " lives in the full desktop app — download it below ↓");
-  }));
+  /* ═════════ OS detection for the download cards ═════════ */
+  (function detectOS() {
+    const ua = navigator.userAgent;
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+    let os = null;
+    if (/Windows|Win32|Win64/i.test(ua) || /Win/i.test(platform)) os = "windows";
+    else if (/Android/i.test(ua)) os = null;
+    else if (/Mac|iPhone|iPad|iPod/i.test(ua) || /Mac/i.test(platform)) os = "macos";
+    else if (/Linux|X11|CrOS/i.test(ua)) os = "linux";
+    if (!os) return;
+    const card = document.querySelector('.dl-card[data-os="' + os + '"]');
+    if (card) card.classList.add("is-detected");
+  })();
 
-  /* ============================================================
-     Latest release — resolve direct download links via GitHub API.
-     Fallback: hrefs already point at /releases/latest.
-     ============================================================ */
+  /* ═════════ latest release: resolve download links ═════════ */
   (function resolveLatestRelease() {
     const PATTERNS = {
       "win-msi": /windows.*setup.*\.msi$/i,
@@ -377,24 +624,38 @@
       "linux-deb": /linux.*setup.*\.deb$/i,
       "linux-tar": /linux.*portable.*\.tar\.gz$/i,
     };
+    // Cached in sessionStorage so repeat views don't re-hit the API.
+    const CACHE_KEY = "typecount.release.v1";
+    const render = (rel) => {
+      const assets = rel.assets || [];
+      Object.keys(PATTERNS).forEach((key) => {
+        const hit = assets.find((a) => PATTERNS[key].test(a.name));
+        if (hit) $$("[data-asset='" + key + "']").forEach((a) => (a.href = hit.browser_download_url));
+      });
+      const tag = rel.tag_name || "";
+      if (!tag) return;
+      const vt = $("#versionText");
+      if (vt) vt.textContent = tag;
+      const dv = $("#dlVersion");
+      if (dv) dv.textContent = "Latest: " + tag + " — every button below grabs this build.";
+      const sv = $("#simVersion");
+      if (sv) sv.textContent = tag.replace(/^v/, "");
+    };
+
+    let cached = null;
+    try { cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "null"); } catch (e) { /* ignore */ }
+    if (cached && cached.cachedAt && Date.now() - cached.cachedAt < 6 * 3600e3) { render(cached); return; }
+
     fetch("https://api.github.com/repos/Amirmpm/typeCount/releases/latest", {
       headers: { Accept: "application/vnd.github+json" },
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
       .then((rel) => {
-        const assets = rel.assets || [];
-        Object.keys(PATTERNS).forEach((key) => {
-          const hit = assets.find((a) => PATTERNS[key].test(a.name));
-          if (hit) $$("[data-asset='" + key + "']").forEach((a) => (a.href = hit.browser_download_url));
-        });
-        const tag = rel.tag_name || "";
-        const vt = $("#versionText");
-        if (vt && tag) vt.textContent = tag;
-        const dv = $("#dlVersion");
-        if (dv && tag) dv.textContent = "Latest: " + tag;
-        const sv = $("#simVersion");
-        if (sv && tag) sv.textContent = tag.replace(/^v/, "");
+        render(rel);
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...rel, cachedAt: Date.now() }));
+        } catch (e) { /* quota / private mode */ }
       })
-      .catch(() => { /* offline / rate-limited: /releases/latest fallback stays */ });
+      .catch(() => { /* offline or rate limited: /releases/latest fallback keeps working */ });
   })();
 })();
