@@ -1,4 +1,4 @@
-name: CI & Windows Release
+name: CI & Cross-Platform Release
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag to publish (e.g. v1.1.0)"
+        description: "Optional release tag to publish (e.g. v1.2.0)"
         required: false
         default: ""
 
@@ -37,18 +37,16 @@ jobs:
           ./tests/bin/test_core
       - name: Run UI, Jalali & i18n tests
         run: node tests/test_ui.cjs
-      - name: Cross-compile TypeCount.exe & TypeCount-Setup-x64.exe via Zig
+      - name: Cross-compile Windows x64 portable & setup via Zig
         run: |
           python3 -m pip install --quiet ziglang
           ZIG_BIN="$(python3 -c 'import ziglang, pathlib; print(pathlib.Path(ziglang.__file__).parent / "zig")')"
           ZIG_BIN="$ZIG_BIN" bash scripts/build_windows.sh
-      - name: Upload Windows binaries
+      - name: Upload Windows executables
         uses: actions/upload-artifact@v4
         with:
           name: TypeCount-windows-x64
-          path: |
-            releases/TypeCount.exe
-            releases/TypeCount-Setup-x64.exe
+          path: releases/TypeCount-v*-windows-x64-*.exe
 
   build-windows-msi:
     needs: test-core-and-ui
@@ -68,26 +66,30 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           wix extension add -g WixToolset.UI.wixext/5.0.2
           wix extension add -g WixToolset.Util.wixext/5.0.2
-      - name: Build & verify TypeCount-Setup-x64.msi
+      - name: Build & verify TypeCount Windows MSI
         shell: pwsh
         run: |
           $hdr = Get-Content src/core/version.hpp -Raw
-          if ($hdr -match '#define TC_VERSION_STR_4\s+"([^"]+)"') { $ver = $Matches[1] } else { $ver = "1.1.0.0" }
-          Write-Host "Building TypeCount MSI version $ver"
+          if ($hdr -match '#define TC_VERSION_STR\s+"([^"]+)"') { $ver3 = $Matches[1] } else { $ver3 = "1.2.0" }
+          if ($hdr -match '#define TC_VERSION_STR_4\s+"([^"]+)"') { $ver4 = $Matches[1] } else { $ver4 = "1.2.0.0" }
+          $srcExe = "releases\TypeCount-v$ver3-windows-x64-portable.exe"
+          $outMsi = "releases\TypeCount-v$ver3-windows-x64-setup.msi"
+          Write-Host "Building TypeCount MSI version $ver4 from $srcExe"
           $wixOut = & wix build installer/TypeCount.wxs `
             -arch x64 `
             -ext WixToolset.UI.wixext `
             -ext WixToolset.Util.wixext `
-            -d "AppVersion=$ver" `
-            -o releases/TypeCount-Setup-x64.msi 2>&1
+            -d "AppVersion=$ver4" `
+            -d "SourceExe=$srcExe" `
+            -o $outMsi 2>&1
           $wixOut | ForEach-Object { Write-Host $_ }
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path releases/TypeCount-Setup-x64.msi)) {
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path $outMsi)) {
             $errLine = ($wixOut | Out-String) -replace "`r?`n", " | "
             Write-Host "::error::$errLine"
             throw "MSI build failed with exit $LASTEXITCODE"
           }
           New-Item -ItemType Directory -Force -Path msi_verify | Out-Null
-          $msiPath = (Resolve-Path releases/TypeCount-Setup-x64.msi).Path
+          $msiPath = (Resolve-Path $outMsi).Path
           $targetDir = (Resolve-Path msi_verify).Path
           $p = Start-Process msiexec.exe -ArgumentList "/a `"$msiPath`" /qn TARGETDIR=`"$targetDir`" /l*v msi_admin.log" -Wait -PassThru
           if ($p.ExitCode -ne 0) {
@@ -101,13 +103,55 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TypeCount-windows-release
-          path: |
-            releases/TypeCount.exe
-            releases/TypeCount-Setup-x64.exe
-            releases/TypeCount-Setup-x64.msi
+          path: releases/TypeCount-v*-windows-x64-*
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Linux GTK3 / WebKit2GTK / XInput2 dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config dpkg-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libxi-dev libx11-dev libxrandr-dev
+      - name: Build & package Linux x64 portable .tar.gz and .deb
+        run: |
+          bash scripts/build_linux.sh
+          dpkg-deb -I releases/TypeCount-v*-linux-x64-setup.deb
+          dpkg-deb -c releases/TypeCount-v*-linux-x64-setup.deb
+          tar -tzf releases/TypeCount-v*-linux-x64-portable.tar.gz
+      - name: Upload Linux Release Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeCount-linux-release
+          path: releases/TypeCount-v*-linux-x64-*
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build & package macOS Universal (.zip & .dmg)
+        run: |
+          bash scripts/build_macos.sh
+          lipo -archs tests/bin/macos_obj/TypeCount.app/Contents/MacOS/TypeCount
+          codesign --verify --deep --strict tests/bin/macos_obj/TypeCount.app
+          hdiutil verify releases/TypeCount-v*-macos-universal-setup.dmg
+      - name: Upload macOS Release Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeCount-macos-release
+          path: releases/TypeCount-v*-macos-universal-*
 
   publish-release:
-    needs: [test-core-and-ui, build-windows-msi]
+    needs: [test-core-and-ui, build-windows-msi, build-linux, build-macos]
     if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
@@ -115,25 +159,26 @@ jobs:
         with:
           name: TypeCount-windows-release
           path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: TypeCount-linux-release
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: TypeCount-macos-release
+          path: release-assets
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REL_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
         run: |
-          ls -laR release-assets
+          shopt -s nullglob
+          ASSETS=(release-assets/TypeCount-v*)
+          ls -lh "${ASSETS[@]}"
           if gh release view "$REL_TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$REL_TAG" \
-              -R "${{ github.repository }}" \
-              release-assets/TypeCount-Setup-x64.msi \
-              release-assets/TypeCount-Setup-x64.exe \
-              release-assets/TypeCount.exe \
-              --clobber
+            gh release upload "$REL_TAG" -R "${{ github.repository }}" "${ASSETS[@]}" --clobber
           else
-            gh release create "$REL_TAG" \
-              -R "${{ github.repository }}" \
-              release-assets/TypeCount-Setup-x64.msi \
-              release-assets/TypeCount-Setup-x64.exe \
-              release-assets/TypeCount.exe \
+            gh release create "$REL_TAG" -R "${{ github.repository }}" "${ASSETS[@]}" \
               --target main \
               --title "TypeCount $REL_TAG" \
               --generate-notes

@@ -127,12 +127,19 @@ public:
         prefs_ = Preferences::load_file(to_utf8(prefs_path_), &prefs_existed);
         if (!prefs_existed && !arg_no_autostart && !demo_mode_) {
             if (effective_locale() == "fa") prefs_.jalali_calendar = true;
+            if (prefs_.dpi_auto) prefs_.dpi_ppi = detect_monitor_ppi(nullptr);
             set_autostart_enabled(true);
             prefs_.save_file(to_utf8(prefs_path_));
-        } else if (!demo_mode_) {
-            // Keep Windows Run registry path synced to the currently launched binary (post-upgrade/move)
-            sync_autostart_path_if_enabled();
+        } else {
+            if (prefs_.dpi_auto) {
+                prefs_.dpi_ppi = detect_monitor_ppi(nullptr);
+            }
+            if (!demo_mode_) {
+                // Keep Windows Run registry path synced to the currently launched binary (post-upgrade/move)
+                sync_autostart_path_if_enabled();
+            }
         }
+        engine_.set_idle_timeout_sec(prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180);
 
         // Open SQLite DB (custom dir or default)
         std::wstring active_db_dir = data_dir_;
@@ -253,8 +260,30 @@ private:
     std::string available_download_url_;
     bool update_manual_trigger_ = false;
 
+    HBRUSH ui_bg_brush_ = nullptr;
+
     std::string effective_locale() const {
         return (prefs_.language == "system") ? resolve_system_locale() : prefs_.language;
+    }
+
+    bool effective_is_dark() const {
+        if (prefs_.color_mode == "dark") return true;
+        if (prefs_.color_mode == "light") return false;
+        return is_windows_dark_theme();
+    }
+
+    void update_ui_window_appearance() {
+        if (!ui_hwnd_) return;
+        bool dark = effective_is_dark();
+        set_window_immersive_dark_mode(ui_hwnd_, dark);
+        HBRUSH next_brush = CreateSolidBrush(dark ? RGB(11, 18, 32) : RGB(243, 246, 252));
+        if (next_brush) {
+            HBRUSH old = ui_bg_brush_;
+            ui_bg_brush_ = next_brush;
+            SetClassLongPtrW(ui_hwnd_, GCLP_HBRBACKGROUND, reinterpret_cast<LONG_PTR>(ui_bg_brush_));
+            if (old) DeleteObject(old);
+            InvalidateRect(ui_hwnd_, nullptr, TRUE);
+        }
     }
 
     void shutdown() {
@@ -279,6 +308,10 @@ private:
         if (app_icon_) {
             DestroyIcon(app_icon_);
             app_icon_ = nullptr;
+        }
+        if (ui_bg_brush_) {
+            DeleteObject(ui_bg_brush_);
+            ui_bg_brush_ = nullptr;
         }
         if (mutex_) {
             CloseHandle(mutex_);
@@ -343,6 +376,10 @@ private:
     void ensure_ui_window() {
         if (ui_hwnd_) return;
 
+        if (!ui_bg_brush_) {
+            ui_bg_brush_ = CreateSolidBrush(effective_is_dark() ? RGB(11, 18, 32) : RGB(243, 246, 252));
+        }
+
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = ui_wnd_proc_static;
@@ -350,7 +387,7 @@ private:
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hIcon = static_cast<HICON>(LoadImageW(hinst_, MAKEINTRESOURCEW(1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
         wc.hIconSm = app_icon_;
-        wc.hbrBackground = CreateSolidBrush(RGB(243, 246, 252));
+        wc.hbrBackground = ui_bg_brush_;
         wc.lpszClassName = L"TypeCountMainWindow";
         RegisterClassExW(&wc);
 
@@ -393,7 +430,12 @@ private:
         if (!ui_hwnd_) return;
 
         prev_compact_ = prefs_.compact;
+        update_ui_window_appearance();
         update_dwm_corners();
+
+        if (prefs_.dpi_auto) {
+            prefs_.dpi_ppi = detect_monitor_ppi(ui_hwnd_);
+        }
 
         std::wstring wv_dir = data_dir_ + L"\\WebView2";
         ensure_dir_wide(wv_dir);
@@ -404,6 +446,8 @@ private:
             wv_dir,
             init_loc,
             prefs_.theme,
+            prefs_.color_mode,
+            is_windows_dark_theme(),
             [this](const std::string& json_str) { enqueue_ipc_message(json_str); },
             [this]() { on_webview_ready(); },
             [this]() {
@@ -758,8 +802,13 @@ private:
         if (!webview_.is_ready()) return;
         JsonValue v = prefs_.to_json();
         v.set("app_version", std::string(TC_VERSION_STR));
+        v.set("platform", std::string(TC_PLATFORM_STR));
         v.set("locale", effective_locale());
         v.set("language_preference", prefs_.language);
+        v.set("color_mode", prefs_.color_mode);
+        v.set("system_dark", is_windows_dark_theme());
+        v.set("effective_dark", effective_is_dark());
+        v.set("detected_dpi", detect_monitor_ppi(ui_hwnd_ ? ui_hwnd_ : capture_hwnd_));
         v.set("visible", ui_visible_);
         v.set("maximized", ui_hwnd_ ? (IsZoomed(ui_hwnd_) != FALSE) : false);
         v.set("fullscreen", false);
@@ -830,10 +879,12 @@ private:
         nid.hWnd = capture_hwnd_;
         nid.uID = 1;
         nid.uFlags = NIF_TIP;
-        bool fa = (prefs_.language == "fa");
+        bool fa = (effective_locale() == "fa");
         std::wstring tip;
         if (paused_) {
             tip = fa ? L"TypeCount · متوقف شده" : L"TypeCount · Paused";
+        } else if (idle_paused_) {
+            tip = fa ? L"TypeCount · حالت استراحت (بیکار)" : L"TypeCount · Idle";
         } else {
             tip = fa ? L"TypeCount · در حال ثبت (کلیک چپ برای بازکردن)" : L"TypeCount · Recording (left-click to open)";
         }
@@ -1087,7 +1138,17 @@ private:
             send_snapshot();
         } else if (action == "theme") {
             prefs_.theme = msg.get("theme").as_string_or("blue");
+            if (prefs_.theme != "blue" && prefs_.theme != "teal" && prefs_.theme != "violet" && prefs_.theme != "graphite") {
+                prefs_.theme = "blue";
+            }
             save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "color_mode") {
+            std::string cm = msg.get("color_mode").as_string_or("system");
+            prefs_.color_mode = Preferences::is_valid_color_mode(cm) ? cm : "system";
+            save_prefs();
+            update_ui_window_appearance();
             send_view_state();
             send_snapshot();
         } else if (action == "ui_scale") {
@@ -1151,8 +1212,24 @@ private:
             save_prefs();
             send_view_state();
             send_snapshot();
+        } else if (action == "dpi_auto") {
+            prefs_.dpi_auto = msg.get("enabled").as_bool(true);
+            if (prefs_.dpi_auto) {
+                prefs_.dpi_ppi = detect_monitor_ppi(ui_hwnd_ ? ui_hwnd_ : capture_hwnd_);
+            }
+            save_prefs();
+            send_view_state();
+            send_snapshot();
+        } else if (action == "detect_dpi") {
+            prefs_.dpi_auto = true;
+            prefs_.dpi_ppi = detect_monitor_ppi(ui_hwnd_ ? ui_hwnd_ : capture_hwnd_);
+            save_prefs();
+            toast_key("message.saved");
+            send_view_state();
+            send_snapshot();
         } else if (action == "dpi_ppi") {
-            prefs_.dpi_ppi = static_cast<int>(std::max<int64_t>(72, std::min<int64_t>(320, msg.get("ppi").as_int(96))));
+            prefs_.dpi_auto = false;
+            prefs_.dpi_ppi = static_cast<int>(std::max<int64_t>(72, std::min<int64_t>(360, msg.get("ppi").as_int(96))));
             save_prefs();
             send_view_state();
             send_snapshot();
@@ -1225,8 +1302,18 @@ private:
         } else if (action == "sound_alerts_enabled") {
             prefs_.sound_alerts_enabled = msg.get("enabled").as_bool(true);
             save_prefs();
-            if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+            if (prefs_.sound_alerts_enabled) play_notification_sound_async(prefs_.notification_sound);
             send_view_state();
+        } else if (action == "notification_sound") {
+            std::string snd = msg.get("sound").as_string_or("pastel_pearl");
+            prefs_.notification_sound = Preferences::is_valid_sound(snd) ? snd : "pastel_pearl";
+            save_prefs();
+            if (prefs_.notification_sound != "none") play_notification_sound_async(prefs_.notification_sound);
+            send_view_state();
+        } else if (action == "preview_sound") {
+            std::string snd = msg.get("sound").as_string_or(prefs_.notification_sound);
+            if (!Preferences::is_valid_sound(snd) || snd == "none") snd = prefs_.notification_sound;
+            if (snd != "none") play_notification_sound_async(snd);
         } else if (action == "app_exclusions_enabled") {
             prefs_.app_exclusions_enabled = msg.get("enabled").as_bool(true);
             save_prefs();
@@ -1258,11 +1345,13 @@ private:
             send_snapshot();
         } else if (action == "idle_detection_enabled") {
             prefs_.idle_detection_enabled = msg.get("enabled").as_bool(true);
+            engine_.set_idle_timeout_sec(prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180);
             save_prefs();
             send_view_state();
             send_snapshot();
         } else if (action == "idle_timeout_sec") {
-            prefs_.idle_timeout_sec = static_cast<int>(std::max<int64_t>(30, std::min<int64_t>(900, msg.get("seconds").as_int(90))));
+            prefs_.idle_timeout_sec = static_cast<int>(std::max<int64_t>(30, std::min<int64_t>(1800, msg.get("seconds").as_int(180))));
+            engine_.set_idle_timeout_sec(prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180);
             save_prefs();
             send_view_state();
             send_snapshot();
@@ -1384,7 +1473,7 @@ private:
             std::wstring out = save_file_dialog(ui_hwnd_, L"CSV Files (*.csv)\0*.csv\0", L"csv", def);
             if (!out.empty()) {
                 engine_.flush();
-                if (db_.export_csv(to_utf8(out), timezone_offset_sec_for(prefs_.timezone))) {
+                if (db_.export_csv(to_utf8(out), timezone_offset_sec_for(prefs_.timezone), nullptr, prefs_.dpi_ppi)) {
                     toast_key("export.saved", to_utf8(out));
                 } else {
                     toast_key("export.failed");
@@ -1396,7 +1485,7 @@ private:
             std::wstring out = save_file_dialog(ui_hwnd_, L"JSON Files (*.json)\0*.json\0", L"json", def);
             if (!out.empty()) {
                 engine_.flush();
-                if (db_.export_json(to_utf8(out), timezone_offset_sec_for(prefs_.timezone))) {
+                if (db_.export_json(to_utf8(out), timezone_offset_sec_for(prefs_.timezone), nullptr, prefs_.dpi_ppi)) {
                     toast_key("export.saved", to_utf8(out));
                 } else {
                     toast_key("export.failed");
@@ -1454,13 +1543,20 @@ private:
         }
 
         int idle_s = prefs_.idle_detection_enabled ? prefs_.idle_timeout_sec : 180;
+        engine_.set_idle_timeout_sec(idle_s);
         auto live = engine_.get_live_metrics(ms, prefs_.break_interval_min, idle_s);
+        bool now_idle = prefs_.idle_detection_enabled &&
+                        (live.is_idle || idle_elapsed_ms() >= static_cast<uint64_t>(idle_s) * 1000ULL);
+        if (now_idle != idle_paused_) {
+            idle_paused_ = now_idle;
+            update_tray_tooltip();
+        }
 
-        // Break reminder notification + optional gentle chime
+        // Break reminder notification + optional gentle pastel chime
         if (live.break_due && !break_notified_) {
             break_notified_ = true;
             if (prefs_.sound_alerts_enabled) {
-                play_gentle_chime_async();
+                play_notification_sound_async(prefs_.notification_sound);
             }
             if (!prefs_.stealth_mode && tray_added_) {
                 show_tray_balloon(
@@ -1475,7 +1571,7 @@ private:
         // Ergonomic RSI strain guard alert
         if (prefs_.ergo_guard_enabled && live.ergo_strain_level >= 2 && !ergo_notified_) {
             ergo_notified_ = true;
-            if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+            if (prefs_.sound_alerts_enabled) play_notification_sound_async(prefs_.notification_sound);
             if (!prefs_.stealth_mode && tray_added_) {
                 show_tray_balloon(
                     fa ? L"TypeCount · هشدار ارگونومی (RSI)" : L"TypeCount · Ergonomic Strain Guard",
@@ -1493,7 +1589,7 @@ private:
             int64_t today_total = snap.get("today").get("keyboard").as_int(0) + snap.get("today").get("mouse").as_int(0);
             if (prefs_.daily_goal > 0 && today_total >= prefs_.daily_goal && db_.get_meta("goal_notified_day") != today) {
                 db_.set_meta("goal_notified_day", today);
-                if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+                if (prefs_.sound_alerts_enabled) play_notification_sound_async(prefs_.notification_sound);
                 if (!prefs_.stealth_mode && tray_added_) {
                     show_tray_balloon(
                         fa ? L"TypeCount · هدف روزانه کامل شد!" : L"TypeCount · Daily Goal Reached!",
@@ -1510,7 +1606,7 @@ private:
             if (peak_wpm >= 35.0 && (prev_best <= 0.0 || peak_wpm >= prev_best + 2.0)) {
                 db_.set_meta("best_wpm_record", std::to_string(static_cast<int>(std::round(peak_wpm))));
                 if (prev_best > 0.0) {
-                    if (prefs_.sound_alerts_enabled) play_gentle_chime_async();
+                    if (prefs_.sound_alerts_enabled) play_notification_sound_async(prefs_.notification_sound);
                     if (!prefs_.stealth_mode && tray_added_) {
                         show_tray_balloon(
                             fa ? L"TypeCount · رکورد جدید سرعت تایپ!" : L"TypeCount · New Peak Speed Record!",
@@ -1731,6 +1827,35 @@ private:
                     prefs_.window_y = rc.top;
                 }
                 return 0;
+            case WM_SETTINGCHANGE: {
+                update_ui_window_appearance();
+                if (ui_visible_ && webview_.is_ready()) {
+                    send_view_state();
+                }
+                return 0;
+            }
+            case WM_DPICHANGED: {
+                const RECT* suggested = reinterpret_cast<const RECT*>(lp);
+                if (suggested && !IsZoomed(hwnd)) {
+                    SetWindowPos(hwnd, nullptr,
+                                 suggested->left, suggested->top,
+                                 suggested->right - suggested->left,
+                                 suggested->bottom - suggested->top,
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                if (prefs_.dpi_auto) {
+                    int new_ppi = detect_monitor_ppi(hwnd);
+                    if (new_ppi != prefs_.dpi_ppi) {
+                        prefs_.dpi_ppi = new_ppi;
+                        save_prefs();
+                        if (ui_visible_ && webview_.is_ready()) {
+                            send_view_state();
+                            send_snapshot();
+                        }
+                    }
+                }
+                return 0;
+            }
             case WM_ACTIVATE:
                 if (LOWORD(wp) != WA_INACTIVE) {
                     webview_.focus();

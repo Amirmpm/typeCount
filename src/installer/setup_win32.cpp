@@ -26,6 +26,7 @@ constexpr int IDR_PAYLOAD_EXE = 101;
 constexpr UINT WM_SETUP_STEP = WM_APP + 10;
 constexpr UINT WM_SETUP_DONE = WM_APP + 11;
 
+constexpr int ID_BTN_BACK = 1000;
 constexpr int ID_BTN_PRIMARY = 1001;
 constexpr int ID_BTN_CANCEL = 1002;
 constexpr int ID_BTN_BROWSE = 1003;
@@ -37,6 +38,9 @@ constexpr int ID_CHK_AUTOSTART = 1008;
 constexpr int ID_CHK_LAUNCH = 1009;
 constexpr int ID_PROGRESS = 1010;
 constexpr int ID_LBL_STATUS = 1011;
+
+constexpr int LOGICAL_CLIENT_W = 556;
+constexpr int LOGICAL_CLIENT_H = 404;
 
 constexpr const wchar_t* UNINSTALL_SUBKEY = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\TypeCount";
 constexpr const wchar_t* RUN_SUBKEY = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -52,15 +56,20 @@ struct ExistingInstall {
 struct WizardState {
     HINSTANCE hinst = nullptr;
     HWND hwnd = nullptr;
+    int dpi = 96;
+    bool dark = false;
+
     HFONT font_ui = nullptr;
     HFONT font_title = nullptr;
     HFONT font_sub = nullptr;
-    HBRUSH brush_white = nullptr;
+    HFONT font_badge = nullptr;
+    HBRUSH brush_header = nullptr;
     HBRUSH brush_bg = nullptr;
+    HBRUSH brush_card = nullptr;
     HICON icon = nullptr;
 
     bool fa = false;
-    int step = 0; // 0 = welcome/options, 1 = installing, 2 = complete
+    int step = 0; // 0 = Welcome, 1 = Options, 2 = Installing, 3 = Complete
     bool busy = false;
     bool install_ok = false;
     std::wstring error_msg;
@@ -72,24 +81,105 @@ struct WizardState {
     bool opt_autostart = true;
     bool opt_launch = true;
 
-    // Controls
+    // Header
     HWND lbl_title = nullptr;
     HWND lbl_sub = nullptr;
     HWND btn_lang = nullptr;
+
+    // Step 0: Welcome
+    HWND lbl_welcome = nullptr;
     HWND lbl_detected = nullptr;
+
+    // Step 1: Options
     HWND lbl_dir = nullptr;
     HWND edit_dir = nullptr;
     HWND btn_browse = nullptr;
     HWND chk_startmenu = nullptr;
     HWND chk_desktop = nullptr;
     HWND chk_autostart = nullptr;
+
+    // Step 2: Installing
     HWND progress = nullptr;
     HWND lbl_status = nullptr;
+
+    // Step 3: Finish
     HWND lbl_finish_msg = nullptr;
     HWND chk_launch = nullptr;
+
+    // Footer navigation
+    HWND btn_back = nullptr;
     HWND btn_primary = nullptr;
     HWND btn_cancel = nullptr;
 };
+
+static int sc(const WizardState* st, int logical) {
+    return MulDiv(logical, st ? st->dpi : 96, 96);
+}
+
+static int detect_window_dpi(HWND hwnd) {
+    HMODULE u32 = GetModuleHandleW(L"user32.dll");
+    if (u32) {
+        if (hwnd) {
+            using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+            auto fn = reinterpret_cast<GetDpiForWindowFn>(GetProcAddress(u32, "GetDpiForWindow"));
+            if (fn) {
+                UINT d = fn(hwnd);
+                if (d >= 72) return static_cast<int>(d);
+            }
+        }
+        using GetDpiForSystemFn = UINT(WINAPI*)();
+        auto sys_fn = reinterpret_cast<GetDpiForSystemFn>(GetProcAddress(u32, "GetDpiForSystem"));
+        if (sys_fn) {
+            UINT d = sys_fn();
+            if (d >= 72) return static_cast<int>(d);
+        }
+    }
+    HDC hdc = GetDC(hwnd);
+    int d = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 96;
+    if (hdc) ReleaseDC(hwnd, hdc);
+    return (d >= 72) ? d : 96;
+}
+
+static void adjust_rect_for_dpi(RECT* rc, DWORD style, DWORD ex_style, int dpi) {
+    HMODULE u32 = GetModuleHandleW(L"user32.dll");
+    if (u32) {
+        using AdjFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+        auto fn = reinterpret_cast<AdjFn>(GetProcAddress(u32, "AdjustWindowRectExForDpi"));
+        if (fn && fn(rc, style, FALSE, ex_style, static_cast<UINT>(dpi))) {
+            return;
+        }
+    }
+    AdjustWindowRectEx(rc, style, FALSE, ex_style);
+}
+
+static bool is_windows_dark_theme() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            0, KEY_READ, &key) == ERROR_SUCCESS) {
+        DWORD val = 1, sz = sizeof(val);
+        LONG rc = RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr, reinterpret_cast<BYTE*>(&val), &sz);
+        RegCloseKey(key);
+        if (rc == ERROR_SUCCESS) return val == 0;
+    }
+    return false;
+}
+
+static void apply_dwm_dark_titlebar(HWND hwnd, bool dark) {
+    if (!hwnd) return;
+    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    if (!dwm) return;
+    using DwmSetFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+    auto fn = reinterpret_cast<DwmSetFn>(GetProcAddress(dwm, "DwmSetWindowAttribute"));
+    if (fn) {
+        BOOL val = dark ? TRUE : FALSE;
+        if (FAILED(fn(hwnd, 20, &val, sizeof(val)))) {
+            fn(hwnd, 19, &val, sizeof(val));
+        }
+    }
+    FreeLibrary(dwm);
+}
 
 static std::wstring known_folder(REFKNOWNFOLDERID id) {
     PWSTR p = nullptr;
@@ -399,76 +489,171 @@ static int perform_uninstall(bool silent) {
     return 0;
 }
 
+static void rebuild_resources(WizardState* st) {
+    if (st->font_ui) DeleteObject(st->font_ui);
+    if (st->font_title) DeleteObject(st->font_title);
+    if (st->font_sub) DeleteObject(st->font_sub);
+    if (st->font_badge) DeleteObject(st->font_badge);
+    if (st->brush_header) DeleteObject(st->brush_header);
+    if (st->brush_bg) DeleteObject(st->brush_bg);
+    if (st->brush_card) DeleteObject(st->brush_card);
+
+    st->dark = is_windows_dark_theme();
+    st->brush_header = CreateSolidBrush(st->dark ? RGB(17, 27, 46) : RGB(255, 255, 255));
+    st->brush_bg = CreateSolidBrush(st->dark ? RGB(11, 18, 32) : RGB(244, 247, 252));
+    st->brush_card = CreateSolidBrush(st->dark ? RGB(22, 34, 58) : RGB(236, 242, 252));
+
+    st->font_title = CreateFontW(-sc(st, 20), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    st->font_sub = CreateFontW(-sc(st, 13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    st->font_ui = CreateFontW(-sc(st, 13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    st->font_badge = CreateFontW(-sc(st, 12), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+}
+
+static void layout_controls(WizardState* st) {
+    if (!st || !st->hwnd) return;
+    auto mv = [&](HWND c, int x, int y, int w, int h, HFONT f) {
+        if (!c) return;
+        MoveWindow(c, sc(st, x), sc(st, y), sc(st, w), sc(st, h), TRUE);
+        SendMessageW(c, WM_SETFONT, reinterpret_cast<WPARAM>(f), TRUE);
+    };
+
+    mv(st->lbl_title, 24, 18, 412, 28, st->font_title);
+    mv(st->lbl_sub, 24, 50, 412, 22, st->font_sub);
+    mv(st->btn_lang, 452, 22, 80, 30, st->font_ui);
+
+    // Step 0: Welcome
+    mv(st->lbl_welcome, 24, 108, 508, 124, st->font_ui);
+    mv(st->lbl_detected, 24, 244, 508, 52, st->font_badge);
+
+    // Step 1: Destination & Options
+    mv(st->lbl_dir, 24, 106, 508, 22, st->font_ui);
+    mv(st->edit_dir, 24, 132, 412, 28, st->font_ui);
+    mv(st->btn_browse, 444, 132, 88, 28, st->font_ui);
+    mv(st->chk_startmenu, 24, 182, 500, 26, st->font_ui);
+    mv(st->chk_desktop, 24, 214, 500, 26, st->font_ui);
+    mv(st->chk_autostart, 24, 246, 500, 26, st->font_ui);
+
+    // Step 2: Installing
+    mv(st->progress, 24, 166, 508, 26, st->font_ui);
+    mv(st->lbl_status, 24, 204, 508, 28, st->font_ui);
+
+    // Step 3: Finish
+    mv(st->lbl_finish_msg, 24, 112, 508, 122, st->font_ui);
+    mv(st->chk_launch, 24, 250, 500, 26, st->font_ui);
+
+    // Footer buttons (always visible when relevant, positioned strictly inside logical 556x404 client rect)
+    mv(st->btn_back, 214, 354, 98, 32, st->font_ui);
+    mv(st->btn_primary, 320, 354, 108, 32, st->font_ui);
+    mv(st->btn_cancel, 436, 354, 96, 32, st->font_ui);
+}
+
 static void apply_texts_and_visibility(WizardState* st) {
     bool fa = st->fa;
     LONG_PTR ex = GetWindowLongPtrW(st->hwnd, GWL_EXSTYLE);
     if (fa) ex |= WS_EX_LAYOUTRTL; else ex &= ~WS_EX_LAYOUTRTL;
     SetWindowLongPtrW(st->hwnd, GWL_EXSTYLE, ex);
 
+    apply_dwm_dark_titlebar(st->hwnd, st->dark);
+
     SetWindowTextW(st->hwnd, fa ? L"نصب TypeCount " TC_VERSION_WSTR : L"TypeCount " TC_VERSION_WSTR L" Setup");
     SetWindowTextW(st->btn_lang, fa ? L"English" : L"فارسی");
 
-    bool s0 = (st->step == 0), s1 = (st->step == 1), s2 = (st->step == 2);
+    bool s0 = (st->step == 0);
+    bool s1 = (st->step == 1);
+    bool s2 = (st->step == 2);
+    bool s3 = (st->step == 3);
+
+    ShowWindow(st->lbl_title, SW_SHOW);
+    ShowWindow(st->lbl_sub, SW_SHOW);
+    ShowWindow(st->btn_lang, (s0 || s1) ? SW_SHOW : SW_HIDE);
+
+    ShowWindow(st->lbl_welcome, s0 ? SW_SHOW : SW_HIDE);
     ShowWindow(st->lbl_detected, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->lbl_dir, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->edit_dir, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->btn_browse, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->chk_startmenu, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->chk_desktop, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->chk_autostart, s0 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->btn_lang, s0 ? SW_SHOW : SW_HIDE);
 
-    ShowWindow(st->progress, s1 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->lbl_status, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->lbl_dir, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->edit_dir, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->btn_browse, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->chk_startmenu, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->chk_desktop, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->chk_autostart, s1 ? SW_SHOW : SW_HIDE);
 
-    ShowWindow(st->lbl_finish_msg, s2 ? SW_SHOW : SW_HIDE);
-    ShowWindow(st->chk_launch, (s2 && st->install_ok) ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->progress, s2 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->lbl_status, s2 ? SW_SHOW : SW_HIDE);
 
+    ShowWindow(st->lbl_finish_msg, s3 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->chk_launch, (s3 && st->install_ok) ? SW_SHOW : SW_HIDE);
+
+    ShowWindow(st->btn_back, s1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(st->btn_primary, SW_SHOW);
+    ShowWindow(st->btn_cancel, (s0 || s1 || s2) ? SW_SHOW : SW_HIDE);
+
+    bool upg = st->existing.found;
     if (s0) {
-        bool upg = st->existing.found;
         SetWindowTextW(st->lbl_title, upg
             ? (fa ? L"بروزرسانی و نصب TypeCount " TC_VERSION_WSTR : L"Upgrade TypeCount to v" TC_VERSION_WSTR)
             : (fa ? L"نصب‌کننده TypeCount " TC_VERSION_WSTR : L"Welcome to TypeCount " TC_VERSION_WSTR L" Setup"));
         SetWindowTextW(st->lbl_sub, upg
-            ? (fa ? L"نسخه قبلی شناسایی شد و بدون حذف سوابق جایگزین می‌شود."
-                  : L"An existing installation was detected and will be upgraded in-place.")
-            : (fa ? L"آمارگیر آفلاین و امن صفحه‌کلید و ماوس برای ویندوز"
-                  : L"Offline keyboard & mouse analytics for Windows"));
+            ? (fa ? L"نسخه قبلی شناسایی شد و بدون حذف سوابق جایگزین می‌شود"
+                  : L"Existing installation detected — your stats & settings are preserved")
+            : (fa ? L"آمارگیر آفلاین، سریع و ایمن صفحه‌کلید و ماوس برای ویندوز"
+                  : L"Offline, fast & privacy-first keyboard and mouse analytics"));
+
+        SetWindowTextW(st->lbl_welcome, fa
+            ? L"این راهنما برنامه TypeCount v" TC_VERSION_WSTR L" را روی رایانه شما نصب می‌کند.\n\n"
+              L"• ثبت ۱۰۰٪ آفلاین تعداد کلیدها، کلیک‌ها، مسافت حرکت و میان‌برها\n"
+              L"• پوسته تاریک/روشن خودکار، تشخیص هوشمند PPI نمایشگر و اعلان‌های ملایم\n"
+              L"• ثبت کامل در فهرست برنامه‌های ویندوز با حذف آسان\n\n"
+              L"برای انتخاب مسیر نصب و میان‌برها، روی «بعدی» کلیک کنید."
+            : L"This wizard will guide you through installing TypeCount v" TC_VERSION_WSTR L" on your computer.\n\n"
+              L"• 100% offline keyboard, mouse click, travel distance & shortcut analytics\n"
+              L"• Adaptive Dark/Light theme, auto monitor PPI detection & soft pastel alerts\n"
+              L"• Clean Windows Apps & Features registration and one-click uninstaller\n\n"
+              L"Click Next to choose your destination folder and shortcuts.");
 
         std::wstring det;
-        if (st->existing.found) {
-            std::wstring ver = st->existing.version.empty() ? L"1.0" : st->existing.version;
+        if (upg) {
+            std::wstring ver = st->existing.version.empty() ? L"1.x" : st->existing.version;
             det = fa
-                ? (L"✓ نسخه قبلی شناسایی شد: v" + ver + L" — ارتقا به v" TC_VERSION_WSTR L" در همان مسیر")
-                : (L"✓ Existing installation detected: v" + ver + L" — Ready to upgrade to v" TC_VERSION_WSTR);
+                ? (L"✓ نسخه قبلی شناسایی شد (v" + ver + L") — ارتقا به نسخه " TC_VERSION_WSTR L" در همان مسیر انجام می‌شود.")
+                : (L"✓ Existing installation found (v" + ver + L") — Ready to upgrade in-place to v" TC_VERSION_WSTR L".");
         } else {
             det = fa
-                ? L"آماده نصب نسخه " TC_VERSION_WSTR L" و ثبت در فهرست برنامه‌های ویندوز."
-                : L"Ready to install v" TC_VERSION_WSTR L" and register with Windows Apps & Features.";
+                ? L"✓ آماده نصب نسخه " TC_VERSION_WSTR L" برای کاربر جاری (بدون نیاز به دسترسی مدیر)."
+                : L"✓ Ready for per-user installation of TypeCount v" TC_VERSION_WSTR L" (no admin privileges required).";
         }
         SetWindowTextW(st->lbl_detected, det.c_str());
+        SetWindowTextW(st->btn_primary, fa ? L"بعدی >" : L"Next >");
+        SetWindowTextW(st->btn_cancel, fa ? L"انصراف" : L"Cancel");
+        EnableWindow(st->btn_primary, TRUE);
+        EnableWindow(st->btn_cancel, TRUE);
+    } else if (s1) {
+        SetWindowTextW(st->lbl_title, fa ? L"تنظیمات مسیر و میان‌برها" : L"Destination & Installation Options");
+        SetWindowTextW(st->lbl_sub, fa ? L"پوشه مقصد و گزینه‌های اجرا را انتخاب کنید" : L"Choose where to install TypeCount and which shortcuts to create");
         SetWindowTextW(st->lbl_dir, fa ? L"مسیر نصب:" : L"Destination folder:");
         SetWindowTextW(st->btn_browse, fa ? L"انتخاب…" : L"Browse…");
         SetWindowTextW(st->chk_startmenu, fa ? L"ایجاد میان‌بر در منوی استارت" : L"Create Start Menu shortcut");
         SetWindowTextW(st->chk_desktop, fa ? L"ایجاد میان‌بر روی دسکتاپ" : L"Create Desktop shortcut");
         SetWindowTextW(st->chk_autostart, fa ? L"اجرای خودکار همراه با ویندوز" : L"Launch TypeCount automatically at Windows startup");
-        SetWindowTextW(st->btn_primary, upg ? (fa ? L"بروزرسانی" : L"Upgrade >") : (fa ? L"نصب" : L"Install >"));
+        SetWindowTextW(st->btn_back, fa ? L"< قبلی" : L"< Back");
+        SetWindowTextW(st->btn_primary, upg ? (fa ? L"بروزرسانی" : L"Upgrade") : (fa ? L"نصب" : L"Install"));
         SetWindowTextW(st->btn_cancel, fa ? L"انصراف" : L"Cancel");
+        EnableWindow(st->btn_back, TRUE);
         EnableWindow(st->btn_primary, TRUE);
         EnableWindow(st->btn_cancel, TRUE);
-    } else if (s1) {
+    } else if (s2) {
         SetWindowTextW(st->lbl_title, fa ? L"در حال نصب TypeCount…" : L"Installing TypeCount…");
         SetWindowTextW(st->lbl_sub, fa ? L"لطفاً چند لحظه صبر کنید" : L"Please wait while TypeCount is configured");
         SetWindowTextW(st->btn_primary, fa ? L"در حال نصب…" : L"Installing…");
+        SetWindowTextW(st->btn_cancel, fa ? L"انصراف" : L"Cancel");
         EnableWindow(st->btn_primary, FALSE);
         EnableWindow(st->btn_cancel, FALSE);
-    } else if (s2) {
+    } else if (s3) {
         if (st->install_ok) {
             SetWindowTextW(st->lbl_title, fa ? L"نصب با موفقیت انجام شد!" : L"TypeCount Installed Successfully!");
             SetWindowTextW(st->lbl_sub, fa ? L"نسخه " TC_VERSION_WSTR L" آماده استفاده است" : L"Version " TC_VERSION_WSTR L" is ready to use");
             std::wstring msg = fa
-                ? (L"TypeCount v" TC_VERSION_WSTR L" با موفقیت در سیستم شما نصب و در فهرست برنامه‌های ویندوز ثبت شد.\n\nمسیر نصب: " + st->target_dir)
-                : (L"TypeCount v" TC_VERSION_WSTR L" has been installed successfully and registered in Windows Installed Programs.\n\nLocation: " + st->target_dir);
+                ? (L"TypeCount v" TC_VERSION_WSTR L" با موفقیت در سیستم شما نصب و در فهرست برنامه‌های ویندوز ثبت شد.\n\nمسیر نصب:\n" + st->target_dir)
+                : (L"TypeCount v" TC_VERSION_WSTR L" has been installed successfully and registered in Windows Apps & Features.\n\nLocation:\n" + st->target_dir);
             SetWindowTextW(st->lbl_finish_msg, msg.c_str());
         } else {
             SetWindowTextW(st->lbl_title, fa ? L"خطا در نصب" : L"Installation Incomplete");
@@ -478,9 +663,10 @@ static void apply_texts_and_visibility(WizardState* st) {
         SetWindowTextW(st->chk_launch, fa ? L"اجرای TypeCount بلافاصله پس از پایان" : L"Launch TypeCount now");
         SetWindowTextW(st->btn_primary, fa ? L"پایان" : L"Finish");
         EnableWindow(st->btn_primary, TRUE);
-        ShowWindow(st->btn_cancel, SW_HIDE);
     }
+
     InvalidateRect(st->hwnd, nullptr, TRUE);
+    UpdateWindow(st->hwnd);
 }
 
 static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -490,50 +676,74 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lp);
             st = reinterpret_cast<WizardState*>(cs->lpCreateParams);
             st->hwnd = hwnd;
+            st->dpi = detect_window_dpi(hwnd);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
             return TRUE;
         }
         case WM_CREATE: {
-            st->brush_white = CreateSolidBrush(RGB(255, 255, 255));
-            st->brush_bg = CreateSolidBrush(RGB(244, 247, 252));
-            st->font_title = CreateFontW(-20, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-            st->font_sub = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-            st->font_ui = CreateFontW(-13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+            st->dpi = detect_window_dpi(hwnd);
+            rebuild_resources(st);
 
-            auto mk = [&](const wchar_t* cls, DWORD style, DWORD ex, int x, int y, int w, int h, int id, HFONT font = nullptr) {
-                HWND c = CreateWindowExW(ex, cls, L"", WS_CHILD | style, x, y, w, h, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), st->hinst, nullptr);
-                SendMessageW(c, WM_SETFONT, reinterpret_cast<WPARAM>(font ? font : st->font_ui), TRUE);
-                return c;
+            auto mk = [&](const wchar_t* cls, DWORD style, DWORD ex, int id) {
+                return CreateWindowExW(
+                    ex, cls, L"", WS_CHILD | WS_VISIBLE | style,
+                    0, 0, 10, 10,
+                    hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), st->hinst, nullptr);
             };
 
-            st->lbl_title = mk(L"STATIC", SS_LEFT, 0, 24, 18, 390, 28, 0, st->font_title);
-            st->lbl_sub = mk(L"STATIC", SS_LEFT, 0, 24, 48, 420, 20, 0, st->font_sub);
-            st->btn_lang = mk(L"BUTTON", BS_PUSHBUTTON, 0, 444, 20, 74, 28, ID_BTN_LANG);
+            st->lbl_title = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+            st->lbl_sub = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+            st->btn_lang = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_BTN_LANG);
 
-            st->lbl_detected = mk(L"STATIC", SS_LEFT, 0, 24, 96, 492, 24, 0);
-            st->lbl_dir = mk(L"STATIC", SS_LEFT, 0, 24, 134, 492, 20, 0);
-            st->edit_dir = mk(L"EDIT", ES_AUTOHSCROLL | WS_TABSTOP, WS_EX_CLIENTEDGE, 24, 158, 396, 28, ID_EDIT_DIR);
+            st->lbl_welcome = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+            st->lbl_detected = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+
+            st->lbl_dir = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+            st->edit_dir = mk(L"EDIT", ES_AUTOHSCROLL | WS_TABSTOP, WS_EX_CLIENTEDGE, ID_EDIT_DIR);
             SetWindowTextW(st->edit_dir, st->target_dir.c_str());
-            st->btn_browse = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, 428, 158, 88, 28, ID_BTN_BROWSE);
+            st->btn_browse = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_BTN_BROWSE);
 
-            st->chk_startmenu = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, 24, 204, 480, 24, ID_CHK_STARTMENU);
-            st->chk_desktop = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, 24, 232, 480, 24, ID_CHK_DESKTOP);
-            st->chk_autostart = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, 24, 260, 480, 24, ID_CHK_AUTOSTART);
+            st->chk_startmenu = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_CHK_STARTMENU);
+            st->chk_desktop = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_CHK_DESKTOP);
+            st->chk_autostart = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_CHK_AUTOSTART);
             SendMessageW(st->chk_startmenu, BM_SETCHECK, st->opt_startmenu ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(st->chk_desktop, BM_SETCHECK, st->opt_desktop ? BST_CHECKED : BST_UNCHECKED, 0);
             SendMessageW(st->chk_autostart, BM_SETCHECK, st->opt_autostart ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            st->progress = mk(PROGRESS_CLASSW, PBS_SMOOTH, 0, 24, 150, 492, 24, ID_PROGRESS);
+            st->progress = mk(PROGRESS_CLASSW, PBS_SMOOTH, 0, ID_PROGRESS);
             SendMessageW(st->progress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
-            st->lbl_status = mk(L"STATIC", SS_LEFT, 0, 24, 186, 492, 24, ID_LBL_STATUS);
+            st->lbl_status = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, ID_LBL_STATUS);
 
-            st->lbl_finish_msg = mk(L"STATIC", SS_LEFT, 0, 24, 104, 492, 110, 0);
-            st->chk_launch = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, 24, 230, 480, 24, ID_CHK_LAUNCH);
+            st->lbl_finish_msg = mk(L"STATIC", SS_LEFT | SS_NOPREFIX, 0, 0);
+            st->chk_launch = mk(L"BUTTON", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_CHK_LAUNCH);
             SendMessageW(st->chk_launch, BM_SETCHECK, st->opt_launch ? BST_CHECKED : BST_UNCHECKED, 0);
 
-            st->btn_primary = mk(L"BUTTON", BS_DEFPUSHBUTTON | WS_TABSTOP, 0, 314, 326, 100, 32, ID_BTN_PRIMARY);
-            st->btn_cancel = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, 422, 326, 94, 32, ID_BTN_CANCEL);
+            st->btn_back = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_BTN_BACK);
+            st->btn_primary = mk(L"BUTTON", BS_DEFPUSHBUTTON | WS_TABSTOP, 0, ID_BTN_PRIMARY);
+            st->btn_cancel = mk(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_BTN_CANCEL);
 
+            layout_controls(st);
+            apply_texts_and_visibility(st);
+            return 0;
+        }
+        case WM_DPICHANGED: {
+            st->dpi = HIWORD(wp);
+            const RECT* suggested = reinterpret_cast<const RECT*>(lp);
+            rebuild_resources(st);
+            if (suggested) {
+                SetWindowPos(hwnd, nullptr,
+                             suggested->left, suggested->top,
+                             suggested->right - suggested->left,
+                             suggested->bottom - suggested->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            layout_controls(st);
+            apply_texts_and_visibility(st);
+            return 0;
+        }
+        case WM_SETTINGCHANGE: {
+            rebuild_resources(st);
+            layout_controls(st);
             apply_texts_and_visibility(st);
             return 0;
         }
@@ -542,14 +752,23 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HDC hdc = BeginPaint(hwnd, &ps);
             RECT cr{};
             GetClientRect(hwnd, &cr);
-            RECT header{0, 0, cr.right, 80};
-            FillRect(hdc, &header, st->brush_white);
-            RECT body{0, 80, cr.right, cr.bottom};
+            int header_h = sc(st, 84);
+            int footer_y = sc(st, 340);
+
+            RECT header{0, 0, cr.right, header_h};
+            FillRect(hdc, &header, st->brush_header);
+            RECT body{0, header_h, cr.right, cr.bottom};
             FillRect(hdc, &body, st->brush_bg);
-            HPEN pen = CreatePen(PS_SOLID, 1, RGB(214, 223, 238));
+
+            if (st->step == 0) {
+                RECT badge{sc(st, 18), sc(st, 236), cr.right - sc(st, 18), sc(st, 304)};
+                FillRect(hdc, &badge, st->brush_card);
+            }
+
+            HPEN pen = CreatePen(PS_SOLID, 1, st->dark ? RGB(38, 54, 84) : RGB(214, 223, 238));
             HGDIOBJ old = SelectObject(hdc, pen);
-            MoveToEx(hdc, 0, 80, nullptr); LineTo(hdc, cr.right, 80);
-            MoveToEx(hdc, 0, 310, nullptr); LineTo(hdc, cr.right, 310);
+            MoveToEx(hdc, 0, header_h, nullptr); LineTo(hdc, cr.right, header_h);
+            MoveToEx(hdc, 0, footer_y, nullptr); LineTo(hdc, cr.right, footer_y);
             SelectObject(hdc, old);
             DeleteObject(pen);
             EndPaint(hwnd, &ps);
@@ -560,10 +779,18 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HWND ctrl = reinterpret_cast<HWND>(lp);
             SetBkMode(hdc, TRANSPARENT);
             if (ctrl == st->lbl_title || ctrl == st->lbl_sub) {
-                SetTextColor(hdc, ctrl == st->lbl_title ? RGB(20, 46, 86) : RGB(86, 102, 128));
-                return reinterpret_cast<LRESULT>(st->brush_white);
+                if (st->dark) {
+                    SetTextColor(hdc, ctrl == st->lbl_title ? RGB(238, 244, 255) : RGB(154, 174, 206));
+                } else {
+                    SetTextColor(hdc, ctrl == st->lbl_title ? RGB(20, 46, 86) : RGB(86, 102, 128));
+                }
+                return reinterpret_cast<LRESULT>(st->brush_header);
             }
-            SetTextColor(hdc, RGB(26, 36, 54));
+            if (ctrl == st->lbl_detected) {
+                SetTextColor(hdc, st->dark ? RGB(147, 197, 253) : RGB(29, 78, 216));
+                return reinterpret_cast<LRESULT>(st->brush_card);
+            }
+            SetTextColor(hdc, st->dark ? RGB(224, 234, 252) : RGB(26, 36, 54));
             return reinterpret_cast<LRESULT>(st->brush_bg);
         }
         case WM_COMMAND: {
@@ -586,24 +813,32 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     CoTaskMemFree(pidl);
                 }
+            } else if (id == ID_BTN_BACK) {
+                if (st->step == 1 && !st->busy) {
+                    st->step = 0;
+                    apply_texts_and_visibility(st);
+                }
             } else if (id == ID_BTN_CANCEL) {
                 if (!st->busy) DestroyWindow(hwnd);
             } else if (id == ID_BTN_PRIMARY) {
                 if (st->step == 0 && !st->busy) {
+                    st->step = 1;
+                    apply_texts_and_visibility(st);
+                } else if (st->step == 1 && !st->busy) {
                     wchar_t buf[1024]{};
                     GetWindowTextW(st->edit_dir, buf, 1024);
                     st->target_dir = buf[0] ? std::wstring(buf) : default_install_dir();
                     st->opt_startmenu = (SendMessageW(st->chk_startmenu, BM_GETCHECK, 0, 0) == BST_CHECKED);
                     st->opt_desktop = (SendMessageW(st->chk_desktop, BM_GETCHECK, 0, 0) == BST_CHECKED);
                     st->opt_autostart = (SendMessageW(st->chk_autostart, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                    st->step = 1;
+                    st->step = 2;
                     st->busy = true;
                     apply_texts_and_visibility(st);
                     std::thread([st]() {
                         bool ok = perform_install(st);
                         PostMessageW(st->hwnd, WM_SETUP_DONE, ok ? 1 : 0, 0);
                     }).detach();
-                } else if (st->step == 2) {
+                } else if (st->step == 3) {
                     bool launch = st->install_ok && (SendMessageW(st->chk_launch, BM_GETCHECK, 0, 0) == BST_CHECKED);
                     if (launch) {
                         std::wstring exe = st->target_dir + L"\\TypeCount.exe";
@@ -626,7 +861,7 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SETUP_DONE: {
             st->busy = false;
             st->install_ok = (wp != 0);
-            st->step = 2;
+            st->step = 3;
             apply_texts_and_visibility(st);
             return 0;
         }
@@ -637,8 +872,10 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (st->font_ui) DeleteObject(st->font_ui);
             if (st->font_title) DeleteObject(st->font_title);
             if (st->font_sub) DeleteObject(st->font_sub);
-            if (st->brush_white) DeleteObject(st->brush_white);
+            if (st->font_badge) DeleteObject(st->font_badge);
+            if (st->brush_header) DeleteObject(st->brush_header);
             if (st->brush_bg) DeleteObject(st->brush_bg);
+            if (st->brush_card) DeleteObject(st->brush_card);
             PostQuitMessage(0);
             return 0;
     }
@@ -685,15 +922,24 @@ int WINAPI wWinMain(HINSTANCE hinst, HINSTANCE, PWSTR cmd_line, int) {
     wc.lpszClassName = L"TypeCountSetupWizard";
     RegisterClassExW(&wc);
 
-    int win_w = 556, win_h = 412;
-    int sx = (GetSystemMetrics(SM_CXSCREEN) - win_w) / 2;
-    int sy = (GetSystemMetrics(SM_CYSCREEN) - win_h) / 2;
+    int init_dpi = detect_window_dpi(nullptr);
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    DWORD ex_style = WS_EX_APPWINDOW;
+    RECT wr{0, 0, MulDiv(LOGICAL_CLIENT_W, init_dpi, 96), MulDiv(LOGICAL_CLIENT_H, init_dpi, 96)};
+    adjust_rect_for_dpi(&wr, style, ex_style, init_dpi);
+    int win_w = wr.right - wr.left;
+    int win_h = wr.bottom - wr.top;
+
+    RECT work{};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    int sx = work.left + std::max(0L, ((work.right - work.left) - win_w) / 2);
+    int sy = work.top + std::max(0L, ((work.bottom - work.top) - win_h) / 2);
 
     HWND hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW,
+        ex_style,
         L"TypeCountSetupWizard",
         L"TypeCount Setup",
-        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        style,
         sx, sy, win_w, win_h,
         nullptr, nullptr, hinst, &st);
     if (!hwnd) return 1;

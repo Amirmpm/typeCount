@@ -55,7 +55,7 @@
                   Condition="SAVED_INSTALLFOLDER" />
 
     <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="B7E9120A-84D2-4F55-91B3-04AC8E72A311">
-      <File Id="TypeCountExe" Source="releases\TypeCount.exe" />
+      <File Id="TypeCountExe" Name="TypeCount.exe" Source="$(var.SourceExe)" />
       <RemoveFolder Id="CleanInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
       <RemoveFolder Id="CleanProgramsDir" Directory="ProgramsDir" On="uninstall" />
       <RegistryValue Root="HKCU"

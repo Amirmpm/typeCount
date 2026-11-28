@@ -53,6 +53,7 @@ struct LiveMetrics {
     double live_cps = 0.0;
     int64_t break_elapsed_sec = 0;
     bool break_due = false;
+    bool is_idle = false;
     int ergo_strain_level = 0; // 0=normal, 1=elevated, 2=high
     int64_t ergo_10m_ops = 0;
 };
@@ -60,6 +61,7 @@ struct LiveMetrics {
 struct CaptureStatusInfo {
     bool listening = true;
     bool paused = false;
+    bool permission_needed = false;
     bool error = false;
     std::string error_code;
     std::string error_message;
@@ -114,8 +116,8 @@ public:
     JsonValue query_history_hours_demo(const std::string& start_day, const std::string& end_day) const;
     JsonValue build_demo_snapshot(const SnapshotQuery& q) const;
 
-    bool export_csv(const std::string& out_path, int tz_offset_sec, std::string* err_out = nullptr);
-    bool export_json(const std::string& out_path, int tz_offset_sec, std::string* err_out = nullptr);
+    bool export_csv(const std::string& out_path, int tz_offset_sec, std::string* err_out = nullptr, int dpi_ppi = 96);
+    bool export_json(const std::string& out_path, int tz_offset_sec, std::string* err_out = nullptr, int dpi_ppi = 96);
     bool backup_to(const std::string& dest_path, std::string* err_out = nullptr);
     bool create_rotating_backup(const std::string& backup_dir, int keep_count, std::string* created_path = nullptr, std::string* err_out = nullptr);
     ImportReport import_database(const std::string& source_path, const std::string& backup_dir);

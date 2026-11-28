@@ -2,7 +2,11 @@
 #include "../src/core/engine.hpp"
 #include "../src/core/json.hpp"
 #include "../src/core/key_mapper.hpp"
+#ifndef _WIN32
+#include "../src/core/posix_host_util.hpp"
+#endif
 #include "../src/core/preferences.hpp"
+#include "../src/core/sound_synth.hpp"
 #include "../src/core/version.hpp"
 
 #include <cassert>
@@ -82,6 +86,26 @@ void test_key_mapper() {
     // Mouse buttons bitmask
     auto btns = tc::extract_mouse_buttons(1 | 4 | 64);
     assert(btns.size() == 3 && btns[0] == 1 && btns[1] == 2 && btns[2] == 4);
+
+    // Linux evdev -> PS/2 scan -> canonical keycode & macOS virtual keycode
+    assert(tc::canonical_code(tc::evdev_to_scan(30)) == 0);        // KEY_A -> A
+    assert(tc::canonical_code(tc::evdev_to_scan(29)) == 59);       // KEY_LEFTCTRL
+    assert(tc::canonical_code(tc::evdev_to_scan(97)) == 62);       // KEY_RIGHTCTRL
+    assert(tc::canonical_code(tc::evdev_to_scan(125)) == 55);      // KEY_LEFTMETA -> Super
+    assert(tc::canonical_code(tc::evdev_to_scan(99)) == 0x10137);  // KEY_SYSRQ
+    assert(tc::canonical_code(tc::evdev_to_scan(119)) == 0x10245); // KEY_PAUSE
+    assert(tc::mac_keycode_to_canonical(0) == 0);
+
+#ifndef _WIN32
+    tc::Preferences ex_p;
+    ex_p.app_exclusions_enabled = true;
+    ex_p.excluded_apps = {"KeePassXC"};
+    assert(tc::posix_util::is_excluded_app(ex_p, "keepassxc"));
+    assert(!tc::posix_util::is_excluded_app(ex_p, "firefox"));
+    auto dec = tc::posix_util::decode_base64_data_url("data:image/png;base64,aGVsbG8=");
+    assert(dec.size() == 5 && std::memcmp(dec.data(), "hello", 5) == 0);
+    (void)tc::posix_util::timezone_offset_sec_for("UTC");
+#endif
     std::cout << "[PASS] test_key_mapper\n";
 }
 
@@ -92,6 +116,10 @@ void test_preferences() {
     tc::Preferences p;
     p.language = "fa";
     p.theme = "teal";
+    p.color_mode = "dark";
+    p.dpi_auto = false;
+    p.dpi_ppi = 144;
+    p.notification_sound = "lavender_harp";
     p.stealth_mode = true;
     p.wake_hotkey = "Ctrl+Alt+K";
     p.daily_goal = 12000;
@@ -116,6 +144,10 @@ void test_preferences() {
     assert(ok);
     assert(p2.language == "fa");
     assert(p2.theme == "teal");
+    assert(p2.color_mode == "dark");
+    assert(p2.dpi_auto == false);
+    assert(p2.dpi_ppi == 144);
+    assert(p2.notification_sound == "lavender_harp");
     assert(p2.stealth_mode == true);
     assert(p2.wake_hotkey == "Ctrl+Alt+K");
     assert(p2.daily_goal == 12000);
@@ -142,9 +174,17 @@ void test_preferences() {
         auto loaded = tc::Preferences::load_file(tmp.string(), &ok);
         assert(ok && loaded.language == loc);
     }
+
+    // Verify synthesized soft pastel WAV headers and silence preset
+    for (const char* snd : {"pastel_pearl", "mist_chime", "peach_marimba", "lavender_harp", "mint_dew", "silk_breeze"}) {
+        const auto& wav = tc::sound::get_cached_pastel_wav(snd);
+        assert(wav.size() > 1000 && std::memcmp(wav.data(), "RIFF", 4) == 0 && std::memcmp(wav.data() + 8, "WAVE", 4) == 0);
+    }
+    assert(tc::sound::get_cached_pastel_wav("none").empty());
+
     fs::remove(tmp);
-    assert(std::string(TC_VERSION_STR) == "1.1.0");
-    assert(TC_VERSION_NUM == 10100);
+    assert(std::string(TC_VERSION_STR) == "1.2.0");
+    assert(TC_VERSION_NUM == 10200);
     std::cout << "[PASS] test_preferences\n";
 }
 

@@ -356,7 +356,7 @@
   cursor: text;
 }
 
-/* Settings inline input */
+/* Settings inline input & badge helpers */
 .tc-input {
   height: 36px;
   padding: 0 12px;
@@ -368,7 +368,25 @@
   min-width: 110px;
   font-variant-numeric: tabular-nums;
 }
-.tc-input:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+.tc-input:focus-visible { outline: 3px solid var(--focus, #60a5fa); outline-offset: 2px; }
+.tc-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tc-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border: 1px solid var(--accent-border);
+  font-variant-numeric: tabular-nums;
+}
 
 /* RTL Support for Persian (fa) */
 html[dir="rtl"] nav button { text-align: right; }

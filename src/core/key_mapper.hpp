@@ -155,6 +155,53 @@ inline uint32_t canonical_code(uint16_t scan) {
     }
 }
 
+inline uint16_t evdev_to_scan(uint16_t evdev) {
+    switch (evdev) {
+        case 85: return 0x00;  // KEY_ZENKAKUHANKAKU
+        case 86: return 0x56;  // KEY_102ND
+        case 87: return 0x57;  // KEY_F11
+        case 88: return 0x58;  // KEY_F12
+        case 96: return 0x11c; // KEY_KPENTER
+        case 97: return 0x11d; // KEY_RIGHTCTRL
+        case 98: return 0x135; // KEY_KPSLASH
+        case 99: return 0x137; // KEY_SYSRQ
+        case 100: return 0x138; // KEY_RIGHTALT
+        case 102: return 0x147; // KEY_HOME
+        case 103: return 0x148; // KEY_UP
+        case 104: return 0x149; // KEY_PAGEUP
+        case 105: return 0x14b; // KEY_LEFT
+        case 106: return 0x14d; // KEY_RIGHT
+        case 107: return 0x14f; // KEY_END
+        case 108: return 0x150; // KEY_DOWN
+        case 109: return 0x151; // KEY_PAGEDOWN
+        case 110: return 0x152; // KEY_INSERT
+        case 111: return 0x153; // KEY_DELETE
+        case 113: return 0x120; // KEY_MUTE
+        case 114: return 0x12e; // KEY_VOLUMEDOWN
+        case 115: return 0x130; // KEY_VOLUMEUP
+        case 119: return 0x245; // KEY_PAUSE
+        case 125: return 0x15b; // KEY_LEFTMETA
+        case 126: return 0x15c; // KEY_RIGHTMETA
+        case 127: return 0x15d; // KEY_COMPOSE
+        case 183: return 0x64;  // KEY_F13
+        case 184: return 0x65;  // KEY_F14
+        case 185: return 0x66;  // KEY_F15
+        case 186: return 0x67;  // KEY_F16
+        case 187: return 0x68;  // KEY_F17
+        case 188: return 0x69;  // KEY_F18
+        case 189: return 0x6a;  // KEY_F19
+        case 190: return 0x6b;  // KEY_F20
+        default:
+            if (evdev >= 1 && evdev <= 84) return evdev;
+            return evdev;
+    }
+}
+
+inline uint32_t mac_keycode_to_canonical(uint16_t vk) {
+    // Apple HID / HIToolbox kVK_* matches canonical_code directly
+    return static_cast<uint32_t>(vk);
+}
+
 inline uint16_t modifier_vk(uint32_t code) {
     switch (code) {
         case 59: return 0xa2; // LCtrl

@@ -10,19 +10,21 @@
 namespace tc {
 
 struct Preferences {
-    std::string language = "en";          // "en", "fa", "system"
-    std::string theme = "blue";           // "blue", "teal", "violet", "graphite"
-    std::string ui_scale = "100";         // "80", "90", "100", "115", "130", "150"
+    std::string language = "en";               // "en", "fa", "system", ...
+    std::string theme = "blue";                // "blue", "teal", "violet", "graphite"
+    std::string color_mode = "system";         // "system", "light", "dark"
+    std::string ui_scale = "100";              // "80", "90", "100", "115", "130", "150"
     std::string today_period = "calendar_day"; // "calendar_day", "rolling_24h"
-    std::string timezone = "system";      // "system" or offset/zone
-    std::string keyboard_layout = "compact"; // "compact", "full_size"
-    std::string keyboard_view = "layout";    // "layout", "treemap"
-    std::string close_action = "ask";     // "ask", "hide", "stealth", "quit"
-    std::string startup_mode = "tray";    // "tray", "stealth"
-    std::string wake_hotkey = "Ctrl+Alt+Shift+T"; // "Ctrl+Alt+Shift+T", "Ctrl+Alt+K", "Ctrl+Shift+F12", "Alt+Shift+T", "None"
-    bool stealth_mode = false;            // true = hide tray icon + work silently in background
-    bool compact = false;                 // Mini widget mode
-    bool pinned = true;                   // Mini always-on-top
+    std::string timezone = "system";           // "system" or IANA zone
+    std::string keyboard_layout = "compact";   // "compact", "full_size"
+    std::string keyboard_view = "layout";      // "layout", "treemap"
+    std::string close_action = "ask";          // "ask", "hide", "stealth", "quit"
+    std::string startup_mode = "tray";         // "tray", "stealth"
+    std::string wake_hotkey = "Ctrl+Alt+Shift+T";
+    std::string notification_sound = "pastel_pearl"; // "pastel_pearl", "mist_chime", "peach_marimba", "lavender_harp", "mint_dew", "silk_breeze", "none"
+    bool stealth_mode = false;
+    bool compact = false;
+    bool pinned = true;
     bool sport_enabled = false;
     bool sport_visible = true;
     bool ignore_software_input = false;
@@ -30,7 +32,7 @@ struct Preferences {
     bool app_exclusions_enabled = true;
     bool pause_in_excluded_apps = false;
     bool idle_detection_enabled = true;
-    int idle_timeout_sec = 180;           // 60, 180, 300, 600
+    int idle_timeout_sec = 180;                // 60, 90, 180, 300
     bool typing_test_enabled = true;
     bool typing_test_count_stats = false;
     bool ergo_insights_enabled = true;
@@ -43,7 +45,8 @@ struct Preferences {
     bool auto_backup = true;
     bool sidebar_collapsed = false;
     int64_t daily_goal = 8000;
-    int break_interval_min = 45;          // 0=off, 20, 45, 60
+    int break_interval_min = 45;               // 0=off, 20, 45, 60
+    bool dpi_auto = true;                      // Automatic physical monitor PPI detection
     int dpi_ppi = 96;
     int window_width = 1160;
     int window_height = 840;
@@ -58,10 +61,21 @@ struct Preferences {
                lang == "ko" || lang == "fr" || lang == "de" || lang == "es";
     }
 
+    static bool is_valid_color_mode(const std::string& mode) {
+        return mode == "system" || mode == "light" || mode == "dark";
+    }
+
+    static bool is_valid_sound(const std::string& snd) {
+        return snd == "pastel_pearl" || snd == "mist_chime" || snd == "peach_marimba" ||
+               snd == "lavender_harp" || snd == "mint_dew" || snd == "silk_breeze" ||
+               snd == "none";
+    }
+
     JsonValue to_json() const {
         JsonValue o = JsonValue::object();
         o.set("language", language);
         o.set("theme", theme);
+        o.set("color_mode", color_mode);
         o.set("ui_scale", ui_scale);
         o.set("today_period", today_period);
         o.set("timezone", timezone);
@@ -70,6 +84,7 @@ struct Preferences {
         o.set("close_action", close_action);
         o.set("startup_mode", startup_mode);
         o.set("wake_hotkey", wake_hotkey);
+        o.set("notification_sound", notification_sound);
         o.set("stealth_mode", stealth_mode);
         o.set("compact", compact);
         o.set("pinned", pinned);
@@ -94,6 +109,7 @@ struct Preferences {
         o.set("sidebar_collapsed", sidebar_collapsed);
         o.set("daily_goal", daily_goal);
         o.set("break_interval_min", break_interval_min);
+        o.set("dpi_auto", dpi_auto);
         o.set("dpi_ppi", dpi_ppi);
         o.set("window_width", window_width);
         o.set("window_height", window_height);
@@ -113,7 +129,13 @@ struct Preferences {
         if (!is_valid_language(p.language)) p.language = "en";
 
         p.theme = o.get("theme").as_string_or("blue");
+        p.color_mode = o.get("color_mode").as_string_or("system");
+        if (p.theme == "dark") {
+            p.theme = "blue";
+            p.color_mode = "dark";
+        }
         if (p.theme != "blue" && p.theme != "teal" && p.theme != "violet" && p.theme != "graphite") p.theme = "blue";
+        if (!is_valid_color_mode(p.color_mode)) p.color_mode = "system";
 
         p.ui_scale = o.get("ui_scale").as_string_or("100");
         if (p.ui_scale != "80" && p.ui_scale != "90" && p.ui_scale != "100" &&
@@ -141,6 +163,9 @@ struct Preferences {
         if (p.startup_mode != "tray" && p.startup_mode != "stealth") p.startup_mode = "tray";
 
         p.wake_hotkey = o.get("wake_hotkey").as_string_or("Ctrl+Alt+Shift+T");
+        p.notification_sound = o.get("notification_sound").as_string_or("pastel_pearl");
+        if (!is_valid_sound(p.notification_sound)) p.notification_sound = "pastel_pearl";
+
         p.stealth_mode = o.get("stealth_mode").as_bool(false);
         p.compact = o.get("compact").as_bool(false);
         p.pinned = o.get("pinned").as_bool(true);
@@ -165,7 +190,8 @@ struct Preferences {
         p.sidebar_collapsed = o.get("sidebar_collapsed").as_bool(false);
         p.daily_goal = std::max<int64_t>(500, std::min<int64_t>(500000, o.get("daily_goal").as_int(8000)));
         p.break_interval_min = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(240, o.get("break_interval_min").as_int(45))));
-        p.dpi_ppi = static_cast<int>(std::max<int64_t>(72, std::min<int64_t>(320, o.get("dpi_ppi").as_int(96))));
+        p.dpi_auto = o.get("dpi_auto").as_bool(true);
+        p.dpi_ppi = static_cast<int>(std::max<int64_t>(72, std::min<int64_t>(360, o.get("dpi_ppi").as_int(96))));
         p.window_width = static_cast<int>(std::max<int64_t>(720, std::min<int64_t>(3840, o.get("window_width").as_int(1160))));
         p.window_height = static_cast<int>(std::max<int64_t>(540, std::min<int64_t>(2160, o.get("window_height").as_int(840))));
         p.window_x = static_cast<int>(o.get("window_x").as_int(-1));
@@ -200,24 +226,11 @@ struct Preferences {
     }
 
     bool save_file(const std::string& path) const {
-        std::string tmp = path + ".tmp";
-        {
-            std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-            if (!f) return false;
-            std::string body = to_json().dump(2);
-            f.write(body.data(), static_cast<std::streamsize>(body.size()));
-            if (!f.good()) return false;
-        }
-        std::remove(path.c_str());
-        if (std::rename(tmp.c_str(), path.c_str()) != 0) {
-            std::ofstream f(path, std::ios::binary | std::ios::trunc);
-            if (!f) return false;
-            std::string body = to_json().dump(2);
-            f.write(body.data(), static_cast<std::streamsize>(body.size()));
-            std::remove(tmp.c_str());
-            return f.good();
-        }
-        return true;
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) return false;
+        std::string out = to_json().dump(2);
+        f.write(out.data(), static_cast<std::streamsize>(out.size()));
+        return f.good();
     }
 };
 

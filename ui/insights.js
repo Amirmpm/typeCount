@@ -245,10 +245,11 @@ function create({document,window,I,send,toast,syncDropdown=()=>{},getSystemTimeZ
  function renderMouse(){
   const rows=mouseBreakdown(snapshot),total=rows.reduce((sum,row)=>sum+row.count,0);
   const themeName=document.documentElement?.dataset?.theme||'blue';
-  const buttonsSignature=JSON.stringify([rows,I.locale,themeName]);
+  const isDark=document.documentElement?.dataset?.colorScheme==='dark';
+  const buttonsSignature=JSON.stringify([rows,I.locale,themeName,isDark]);
   if(buttonsSignature===mouseButtonsSignature)return;
   mouseButtonsSignature=buttonsSignature;
-  const palette=typeof ClickPulseThemes!=='undefined'?ClickPulseThemes.get(themeName):{empty:'#edf4ff',full:'#1f53a0',accent:'#2563eb'};
+  const palette=typeof ClickPulseThemes!=='undefined'?ClickPulseThemes.get(themeName,isDark):{empty:isDark?'#1b2842':'#edf4ff',full:isDark?'#4f86f7':'#1f53a0',accent:isDark?'#4f86f7':'#2563eb'};
   const rgb=hex=>[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
   const from=rgb(palette.empty),to=rgb(palette.accent);
   const colors={};
@@ -294,7 +295,7 @@ function create({document,window,I,send,toast,syncDropdown=()=>{},getSystemTimeZ
    return el;
   }));
   const drawing=svg('svg',{viewBox:'0 0 200 270',class:'mouse-drawing',role:'img','aria-label':t('mouse.buttons')});
-  const ink={shell:'#f9fbff',edge:palette.accent+'42',shadow:palette.accent+'18'};
+  const ink={shell:isDark?'#1c2a42':'#f9fbff',edge:palette.accent+(isDark?'68':'42'),shadow:palette.accent+(isDark?'24':'18')};
   drawing.append(svg('ellipse',{cx:100,cy:253,rx:52,ry:9,fill:ink.shadow}));
   for(const [key,y]of [['side_forward',99],['side_back',130]]){
    const side=svg('rect',{x:31,y,width:10,height:27,rx:4.5,fill:colors[key],stroke:ink.edge,'stroke-width':1.2,'data-mouse-button':key}),sideTitle=svg('title');

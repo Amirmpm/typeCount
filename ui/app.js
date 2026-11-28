@@ -29,12 +29,17 @@ const I=ClickPulseI18n;
 const literaryEnglish=createClickPulseI18n(window.clickpulseMessages,'en',window.clickpulsePlatform);
 const T=ClickPulseThemes;
 let currentTheme=T.get(window.clickpulseTheme).name;
-T.apply(document.documentElement,currentTheme);
+let currentColorMode=window.clickpulseColorMode||'system';
+let currentSystemDark=!!window.clickpulseSystemDark;
+const isDarkMode=()=>T.resolveDark?T.resolveDark(currentColorMode,currentSystemDark):false;
+T.apply(document.documentElement,currentTheme,currentColorMode,currentSystemDark);
 const t=(key,values={})=>I.t(key,values);
 const n=value=>I.number(value);
 I.apply(document);
 $('theme-select').value=currentTheme;
-for(const option of $('theme-select').options)option.dataset.swatch=T.get(option.value).accent;
+if($('color-mode-select'))$('color-mode-select').value=currentColorMode;
+const syncThemeSwatches=()=>{for(const option of $('theme-select').options)option.dataset.swatch=T.get(option.value,isDarkMode()).accent;};
+syncThemeSwatches();
 const Dropdowns=ClickPulseDropdowns.create(document,window,t);
 window.ClickPulseDropdowns=Dropdowns;
 const total=c=>(c?.keyboard||0)+(c?.mouse||0);
@@ -57,14 +62,14 @@ function updateHistoryRevision(rows=[]){
 let sidebarCollapsed=false;
 let recordingPaused=null;
 let dataOperationBusy=false;
-let updateState={status:'idle',current:window.typeCountVersion||'1.1.0',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
+let updateState={status:'idle',current:window.typeCountVersion||'1.2.0',version:null,can_install:false,update_command:null,automatic:true,received:0,total:0};
 const updateBusy=()=>['downloading','verifying','preparing','installing'].includes(updateState.status);
 const updateInstalling=()=>['preparing','installing'].includes(updateState.status);
 function renderUpdateState(){
   const button=$('check-updates'),status=$('update-status'),details=$('update-details');
   if(!button||!status||!details)return;
   const state=updateState;
-  const curVer=state.current_version||state.current||window.typeCountVersion||'1.1.0';
+  const curVer=state.current_version||state.current||window.typeCountVersion||'1.2.0';
   const normStatus=state.status==='up_to_date'?'current':state.status==='rate_limited'?'limited':state.status;
   const ver=state.available_version||state.version;
   const available=['available','ready'].includes(normStatus),managed=!!state.update_command;
@@ -242,10 +247,16 @@ window.renderTodayPeriod=()=>{
   $('today-period-select').value=todayPeriod();Dropdowns.sync('today-period-select');
 };
 $('language-select').addEventListener('change',event=>send('language',{language:event.target.value}));
+$('color-mode-select')?.addEventListener('change',event=>{
+  const mode=event.target.value||'system';
+  window.setInterfaceColorMode(mode,currentSystemDark);
+  send('color_mode',{color_mode:mode});
+});
 $('theme-select').addEventListener('change',event=>send('theme',{theme:event.target.value}));
 $('ui-scale-select').addEventListener('change',event=>send('ui_scale',{scale:event.target.value}));
 window.renderDisplaySettings=()=>{
   $('ui-scale-select').value=window.presentationView?.ui_scale||'100';Dropdowns.sync('ui-scale-select');
+  if($('color-mode-select')){$('color-mode-select').value=window.presentationView?.color_mode||currentColorMode;Dropdowns.sync('color-mode-select');}
 };
 const K=ClickPulseKeyboard;
 const onWindows=window.clickpulsePlatform==='windows',onLinux=window.clickpulsePlatform==='linux';
@@ -280,14 +291,46 @@ if(typeof ResizeObserver==='function')new ResizeObserver(()=>{
   if(page==='keys'&&usesKeyboardTreemap()&&!window.presentationView?.compact&&keyboardDistribution)renderKeyboardTreemap(keyboardDistribution);
 }).observe($('keyboard-treemap'));
 const renderSignatures=new Map();
-window.setInterfaceTheme=name=>{
-  const next=T.get(name).name;$('theme-select').value=next;Dropdowns.sync('theme-select');
-  if(next===currentTheme)return;
-  currentTheme=next;T.apply(document.documentElement,currentTheme);
+const applyThemeNow=()=>{
+  T.apply(document.documentElement,currentTheme,currentColorMode,currentSystemDark);
+  syncThemeSwatches();
   renderSignatures.clear();historySignature='';
 };
+window.setInterfaceTheme=name=>{
+  const next=T.get(name,isDarkMode()).name;$('theme-select').value=next;Dropdowns.sync('theme-select');
+  if(next===currentTheme)return;
+  currentTheme=next;applyThemeNow();
+};
+window.setInterfaceColorMode=(mode,systemDark)=>{
+  const nextMode=['system','light','dark'].includes(mode)?mode:'system';
+  const nextSys=typeof systemDark==='boolean'?systemDark:currentSystemDark;
+  if($('color-mode-select')){$('color-mode-select').value=nextMode;Dropdowns.sync('color-mode-select');}
+  const prevEff=isDarkMode();
+  currentColorMode=nextMode;currentSystemDark=nextSys;
+  if(prevEff!==isDarkMode()||document.documentElement.dataset.colorMode!==nextMode){
+    applyThemeNow();
+    if(data){
+      if(page==='history')renderHistory();
+      else if(page==='overview'){
+        renderChanged('trend',[range,data.days.slice(-range)],()=>renderTrend($('trend-chart'),data.days.slice(-range)));
+        renderChanged('donut',data.lifetime,()=>renderDonut(data.lifetime));
+      }else if(page==='keys'){
+        renderChanged('keyboard',[data.keyboard_stats||data.top_keys,window.presentationView?.keyboard_layout,usesKeyboardTreemap()],renderKeyboard);
+      }
+      insights?.render(page,data);
+    }
+  }
+};
+try{
+  const mq=window.matchMedia?.('(prefers-color-scheme: dark)');
+  if(mq?.addEventListener){
+    mq.addEventListener('change',e=>{
+      if(currentColorMode==='system')window.setInterfaceColorMode('system',!!e.matches);
+    });
+  }
+}catch{}
 function renderChanged(name,values,render){
-  const signature=JSON.stringify([I.locale,currentTheme,values]);
+  const signature=JSON.stringify([I.locale,currentTheme,isDarkMode(),values]);
   if(renderSignatures.get(name)===signature)return;
   render();renderSignatures.set(name,signature);
 }
@@ -660,15 +703,16 @@ function renderWindows(windows){
 }
 const trendNodes=new WeakMap();
 function renderTrend(container,days,mouseColor){
-  const mouseFill=mouseColor||T.get(currentTheme).mouse;
-  const layout=JSON.stringify([I.locale,currentTheme,mouseFill,days.map(d=>[d.day,d.start,d.end,d.grouping])]);
+  const dark=isDarkMode(),palette=T.get(currentTheme,dark);
+  const mouseFill=mouseColor||palette.mouse;
+  const layout=JSON.stringify([I.locale,currentTheme,dark,mouseFill,days.map(d=>[d.day,d.start,d.end,d.grouping])]);
   let chart=trendNodes.get(container);
   if(!chart||chart.layout!==layout){
     const svg=svgNode('svg',{viewBox:'0 0 600 132',preserveAspectRatio:'none',class:'trend-plot',role:'img','aria-label':t('chart.aria')});
     const yAxis=document.createElement('div'),xAxis=document.createElement('div'),empty=document.createElement('div');
     yAxis.className='trend-y-axis';xAxis.className='trend-x-axis';empty.className='empty-label';empty.textContent=t('common.empty');
     const grid=svgNode('g');svg.append(grid);
-    const width=600/Math.max(1,days.length),barWidth=Math.min(26,width*.6),palette=T.get(currentTheme);
+    const width=600/Math.max(1,days.length),barWidth=Math.min(26,width*.6);
     const bars=days.map((d,i)=>[palette.accent,mouseFill].map(color=>{
       const node=svgNode('rect',{x:i*width+(width-barWidth)/2,width:barWidth,rx:1.4,fill:color}),title=svgNode('title');node.append(title);svg.append(node);return {node,title};
     }));
@@ -708,13 +752,13 @@ function renderTrend(container,days,mouseColor){
 }
 let donutNodes;
 function renderDonut(counts){
-  const all=total(counts),circ=2*Math.PI*51,palette=T.get(currentTheme);
+  const all=total(counts),circ=2*Math.PI*51,dark=isDarkMode(),palette=T.get(currentTheme,dark);
   const entries=[
     [t('common.keyboard'),counts.keyboard,palette.accent],
     [t('common.mouse'),counts.mouse,palette.mouse]
   ];
   const describe=([label,value])=>`${label}: ${n(value)} (${I.percent(all?value/all:0,1)})`;
-  const layout=JSON.stringify([I.locale,currentTheme,entries.map(([label,value,color])=>[label,value>0&&all>0,color])]);
+  const layout=JSON.stringify([I.locale,currentTheme,dark,entries.map(([label,value,color])=>[label,value>0&&all>0,color])]);
   if(!donutNodes||donutNodes.layout!==layout){
     const svg=svgNode('svg',{viewBox:'0 0 170 170',role:'img'});
     svg.append(svgNode('circle',{cx:85,cy:85,r:51,fill:'none',stroke:palette.empty,'stroke-width':13}));
@@ -808,9 +852,9 @@ function renderCalendar(){
 }
 function renderHistory(){
   const today=data.now.split('T')[0],records=H.recordedInRange(data.history_days,today,historyRange),bounds=H.bounds(data.history_days,today,historyRange);
-  if(!dataOperationBusy&&window.presentationView?.visible!==false)scatter.update(data,records,bounds,currentTheme);
+  if(!dataOperationBusy&&window.presentationView?.visible!==false)scatter.update(data,records,bounds,currentTheme+':'+(isDarkMode()?'dark':'light'));
   const pagination=H.paginate(records,historyPage);historyPage=pagination.page;
-  const signature=I.locale+':'+Boolean(I.jalali)+':'+currentTheme+':'+historyRange+':'+historyPage+':'+today+':'+historyRevision;
+  const signature=I.locale+':'+Boolean(I.jalali)+':'+currentTheme+':'+isDarkMode()+':'+historyRange+':'+historyPage+':'+today+':'+historyRevision;
   if(signature===historySignature)return;
   historySignature=signature;
   const days=H.calendarDays(records,bounds.start,bounds.end),trend=H.trend(days);
@@ -892,7 +936,7 @@ function renderKeyboard(){
 }
 function keyColor(count,max){
   const intensity=count?Math.pow(Math.log1p(count)/Math.log1p(max),3):0;
-  const palette=T.get(currentTheme),from=T.rgb(palette.empty),to=T.rgb(palette.full);
+  const palette=T.get(currentTheme,isDarkMode()),from=T.rgb(palette.empty),to=T.rgb(palette.full);
   return '#'+from.map((value,i)=>Math.round(value+(to[i]-value)*intensity).toString(16).padStart(2,'0')).join('');
 }
 function renderKeyboardTreemap(view){

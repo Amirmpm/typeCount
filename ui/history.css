@@ -5,13 +5,13 @@
 select {appearance:none;-webkit-appearance:none;min-width:108px;padding-right:34px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%235b7ca8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-position:right 10px center;background-repeat:no-repeat;background-size:14px 14px}
 #heatmap {overflow-x:auto;padding:4px 2px 5px}
 .calendar-year {min-width:max-content;display:grid;grid-template-columns:max-content 1fr;column-gap:9px}
-.calendar-months {position:relative;height:18px;grid-column:2;margin-left:0;font:var(--ui-micro-size) var(--sans);color:#7d94b3}.calendar-months span {position:absolute;white-space:nowrap}
-.calendar-body {display:contents}.calendar-weekdays {grid-column:1;width:max-content;min-width:23px;display:grid;grid-template-rows:repeat(7,12px);gap:3px;font-size:var(--ui-micro-size);color:#8096b6;align-items:center}
+.calendar-months {position:relative;height:18px;grid-column:2;margin-left:0;font:var(--ui-micro-size) var(--sans);color:var(--muted,#7d94b3)}.calendar-months span {position:absolute;white-space:nowrap}
+.calendar-body {display:contents}.calendar-weekdays {grid-column:1;width:max-content;min-width:23px;display:grid;grid-template-rows:repeat(7,12px);gap:3px;font-size:var(--ui-micro-size);color:var(--muted,#8096b6);align-items:center}
 .heatmap {grid-column:2;width:max-content;height:102px;grid-template-rows:repeat(7,12px);grid-auto-columns:12px;gap:3px}
-.heat-cell {width:12px;height:12px;border-radius:2px}.heat-cell.today {outline:1px solid #2563eb;outline-offset:2px}
+.heat-cell {width:12px;height:12px;border-radius:2px}.heat-cell.today {outline:1px solid var(--blue,#2563eb);outline-offset:2px}
 #history h2, #scatter-title {font-size:var(--ui-section-size)}
 .history-summary {margin:0 0 16px;color:var(--muted);font-size:var(--ui-detail-size);line-height:1.6}
-.history-pagination {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-size:var(--ui-micro-size);color:#7087a7}.history-pagination>div {display:flex;gap:8px}
+.history-pagination {display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px;font-size:var(--ui-micro-size);color:var(--muted,#7087a7)}.history-pagination>div {display:flex;gap:8px}
 
 #history {--history-mouse:#e5a00d}
 #history .mouse-dot {background:var(--history-mouse)}

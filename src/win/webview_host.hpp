@@ -47,6 +47,8 @@ public:
               const std::wstring& user_data_dir,
               const std::string& initial_locale,
               const std::string& initial_theme,
+              const std::string& initial_color_mode,
+              bool initial_system_dark,
               MessageCallback on_msg,
               ReadyCallback on_ready,
               std::function<void()> on_runtime_missing) {
@@ -55,6 +57,8 @@ public:
         user_data_dir_ = user_data_dir;
         initial_locale_ = initial_locale;
         initial_theme_ = initial_theme;
+        initial_color_mode_ = initial_color_mode;
+        initial_system_dark_ = initial_system_dark;
         on_msg_ = std::move(on_msg);
         on_ready_ = std::move(on_ready);
         on_runtime_missing_ = std::move(on_runtime_missing);
@@ -221,6 +225,8 @@ private:
                 "window.clickpulseLocale=" + JsonValue::escape_string(owner_->initial_locale_) + ";"
                 "window.clickpulsePlatform='windows';"
                 "window.clickpulseTheme=" + JsonValue::escape_string(owner_->initial_theme_) + ";"
+                "window.clickpulseColorMode=" + JsonValue::escape_string(owner_->initial_color_mode_) + ";"
+                "window.clickpulseSystemDark=" + std::string(owner_->initial_system_dark_ ? "true" : "false") + ";"
                 "window.typeCountVersion=" + JsonValue::escape_string(TC_VERSION_STR) + ";";
             owner_->webview_->AddScriptToExecuteOnDocumentCreated(to_wide(boot).c_str(), nullptr);
 
@@ -310,6 +316,8 @@ private:
     std::wstring user_data_dir_;
     std::string initial_locale_ = "en";
     std::string initial_theme_ = "blue";
+    std::string initial_color_mode_ = "system";
+    bool initial_system_dark_ = false;
     MessageCallback on_msg_;
     ReadyCallback on_ready_;
     std::function<void()> on_runtime_missing_;
