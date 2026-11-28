@@ -1,5 +1,71 @@
 # Deploying the TypeCount landing page to Cloudflare
 
+## Caching — why a normal refresh must show the newest version
+
+Two independent mechanisms guarantee this. Either one alone would be enough;
+both together means a stale deploy can never be served again.
+
+**1. `Cache-Control` revalidates every request.**
+
+`landing/_headers` sends `public, max-age=0, must-revalidate` for HTML, CSS and
+JS. A returning visitor never reuses an hour-old script: the browser asks the
+edge whether the file changed. Cloudflare answers `304 Not Modified` from the
+file's ETag when nothing changed, so revalidation costs one empty round trip.
+Only the two brand images get a long cache.
+
+The original policy had `max-age=3600` on `/style.css` and `/app.js`, which is
+exactly why a hard refresh was needed after a deploy.
+
+**2. Every deploy writes new asset URLs.**
+
+`scripts/assets-version.mjs` appends `?v=<content hash>` to the CSS/JS URLs in
+`landing/index.html`:
+
+```html
+<link rel="stylesheet" href="/style.css?v=faa5c7487b">
+<script src="/live.js?v=98f04442bf"></script>
+<script src="/app.js?v=8f9aee5e45"></script>
+```
+
+Because the query string is derived from the file contents, a changed file
+always gets a new URL — so even a browser holding a previously-cached long
+`max-age` copy cannot serve the old code.
+
+### Before every deploy
+
+```bash
+npm run version:assets    # rewrite the ?v= hashes
+```
+
+Or let the deploy script do it for you:
+
+```bash
+npm run deploy            # version + wrangler deploy
+npm run deploy:pages      # version + pages deploy
+```
+
+`npm run version:check` exits non-zero if the hashes are stale, which is the
+right thing to wire into CI. The script is idempotent, so running it twice is
+harmless.
+
+Heads-up on Cloudflare's header semantics: a nested `_headers` rule that sets
+`Cache-Control` is *joined* with the `/*` rule rather than replacing it, and
+RFC 9111 then resolves the duplicate to the **first** value. The file therefore
+uses the documented `! Cache-Control` detach line before any nested
+`Cache-Control`, which is why the images really do get their long cache.
+
+Verified with `wrangler dev`:
+
+```
+/                 public, max-age=0, must-revalidate
+/style.css        public, max-age=0, must-revalidate
+/live.js          public, max-age=0, must-revalidate
+/app.js           public, max-age=0, must-revalidate
+/assets/icon.svg  public, max-age=604800, stale-while-revalidate=86400
+/robots.txt       public, max-age=3600
+```
+
+
 ## Does this site use the 100,000 requests/day quota? — No.
 
 This project is **pure static assets**: HTML, CSS, JS and two images. There is

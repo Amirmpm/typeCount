@@ -1,15 +1,44 @@
-# Cloudflare Pages headers for the TypeCount landing site
+# TypeCount landing — cache policy
+#
+# Goal: a normal refresh (or even just navigating back to the site) must show
+# the newest deploy. No hard refresh should ever be required.
+#
+# The previous policy set max-age=3600 on /style.css and /app.js, so returning
+# visitors kept executing hour-old JavaScript for up to an hour after a deploy.
+# Now everything that carries behaviour revalidates on every request.
+#
+# Revalidation is cheap: Cloudflare sends an ETag (a hash of the file), so a
+# cookie-less 304 round trip is all a cached visitor pays. When the file has
+# changed, the new bytes come down immediately.
+#
+# Only the two brand images, whose filenames do not change but whose content
+# almost never does, get a long cache.
+
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=()
+  Cache-Control: public, max-age=0, must-revalidate
 
-/assets/*
-  Cache-Control: public, max-age=604800, immutable
+# Brand images: long cache, they are effectively immutable.
+# `! Cache-Control` detaches the /* value first, otherwise Cloudflare joins the
+# two rules into "public, max-age=0, must-revalidate, public, max-age=604800",
+# and RFC 9111 says a duplicated directive resolves to the first — i.e. the
+# long cache would silently not apply.
+/assets/typecount-mark.png
+  ! Cache-Control
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
 
-/style.css
+/assets/icon.svg
+  ! Cache-Control
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# Metadata — short cache, detached so the /* value does not duplicate it.
+/robots.txt
+  ! Cache-Control
   Cache-Control: public, max-age=3600
 
-/app.js
+/sitemap.xml
+  ! Cache-Control
   Cache-Control: public, max-age=3600

@@ -1,0 +1,14 @@
+{
+  "name": "typecount-landing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build helpers for the TypeCount landing site (deploy tooling only — the site itself has no dependencies).",
+  "type": "module",
+  "scripts": {
+    "version:assets": "node scripts/assets-version.mjs",
+    "version:check": "node scripts/assets-version.mjs --check",
+    "deploy": "node scripts/assets-version.mjs && wrangler deploy --cwd landing",
+    "deploy:pages": "node scripts/assets-version.mjs && wrangler pages deploy landing --project-name typecount",
+    "preview": "node scripts/assets-version.mjs && wrangler dev --cwd landing"
+  }
+}
