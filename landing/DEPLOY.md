@@ -1,8 +1,38 @@
 # Deploying the TypeCount landing page to Cloudflare
 
-The site in `landing/` is fully static: no build step, no bundler, no runtime
-dependencies. It deploys either as a **Worker with static assets** (the setup
-below) or as a classic **Pages** project.
+## Does this site use the 100,000 requests/day quota? — No.
+
+This project is **pure static assets**: HTML, CSS, JS and two images. There is
+no Worker code (`main` is not defined in `wrangler.toml`), no Pages Functions,
+no `functions/` directory.
+
+Cloudflare's own documentation and pricing state that **requests to static
+assets are free and unlimited and do not count toward the Workers/Pages
+Functions 100,000-per-day request limit**. Only invocations that execute Worker
+code are metered. Because this Worker has no script, the only thing served is
+static files — so the daily request quota is untouched even at high traffic.
+
+Additional safeguards already in place:
+
+| Concern | Status |
+| --- | --- |
+| Worker invocations | None — no `main` entry point |
+| Pages Functions | None — no `functions/` directory |
+| KV / D1 / R2 / Durable Objects | Not used |
+| `wrangler.toml` assets-only | Yes — `[assets]` block without `main` |
+| Build minutes (Pages) | No build step; ~0 build time |
+| Client-side API calls | 1 per visitor per 6h, cached in `sessionStorage` |
+
+The one outbound request is the GitHub Releases API call used to resolve the
+newest download links. It is made **from the visitor's browser to
+api.github.com** — it never touches Cloudflare — and the result is cached in
+`sessionStorage` for 6 hours so repeat views make no request at all. If GitHub
+rate-limits the caller, every button falls back to
+`github.com/Amirmpm/typeCount/releases/latest`, which still works.
+
+**What does count on Cloudflare:** deployments (not requests). Workers Free
+allows 100 deploy operations per day; Pages Free allows 500 builds per month.
+You would need to deploy constantly to approach either.
 
 ---
 
@@ -12,25 +42,23 @@ That happens when the configured **Root directory** does not exist in the branch
 Cloudflare clones. Two things commonly cause it:
 
 1. **The branch is wrong.** `landing/` must exist on the branch that Cloudflare
-   builds. If landing was only committed to a feature branch, set
-   *Settings → Build → Branch control* to that branch, or merge it into `main`.
-2. **A leading slash.** Some UIs reject `/landing`; use `landing` without the
-   slash.
+   builds. If landing was only committed to a feature branch, merge it into
+   `main` or point the project at that branch.
+2. **A leading slash.** Some UIs reject `/landing`; use `landing`.
 
-To confirm from your side:
+Confirm from your side:
 
 ```bash
 git ls-tree -d --name-only origin/main | grep landing
 ```
 
-If that prints nothing, `landing/` is not on `main` yet.
-
 ---
 
-## Correct settings for `npx wrangler deploy`
+## Deployment settings
 
-`npx wrangler deploy` deploys a **Worker**, not a Pages site, so it needs an
-`[assets]` block — which is what `landing/wrangler.toml` now contains:
+If you deploy with `npx wrangler deploy`, wrangler deploys a **Worker with
+static assets** (not a Pages site), which needs the `[assets]` block now in
+`landing/wrangler.toml`:
 
 ```toml
 name = "typecount"
@@ -41,8 +69,6 @@ directory = "."
 not_found_handling = "404-page"
 ```
 
-Use these values in the Cloudflare build configuration:
-
 | Field | Value |
 | --- | --- |
 | Build command | *(none / empty)* |
@@ -50,31 +76,23 @@ Use these values in the Cloudflare build configuration:
 | Root directory | `landing` |
 | Build variables | *(none)* |
 
-`directory = "."` resolves relative to the **root directory**, so `landing/` is
-published. Verified locally: `wrangler dev` in `landing/` serves `/`, `/style.css`,
-`/app.js` and `/live.js` with 200, and returns 404 for `/_headers`, `/DEPLOY.md`
-and `/wrangler.toml` thanks to `landing/.assetsignore`.
+`directory = "."` resolves relative to the root directory, so `landing/` is
+published. `landing/.assetsignore` keeps `wrangler.toml`, `DEPLOY.md` and
+`_headers` out of the published site.
 
-### Remember to deploy the branch
-
-```bash
-git push origin <your-branch>
-```
-
-Then either point the Cloudflare project at that branch, or open a PR and merge
-into `main`.
+Verified locally with `wrangler dev` inside `landing/`: `/`, `/style.css`,
+`/app.js`, `/live.js` → 200; `/_headers`, `/DEPLOY.md`, `/wrangler.toml` → 404.
 
 ---
 
-## Alternative: Cloudflare Pages (recommended for a static site)
+## Alternative: Cloudflare Pages
 
-Pages is a better fit than a Worker here — free custom domains, preview builds
-per commit, and `_headers` support.
-
-1. **Workers & Pages → Create → Pages → Connect to Git.**
-2. Framework preset **None**, build command **empty**, output directory
-   **`landing`**, production branch **`main`**.
-3. Deploy → `https://typecount.pages.dev`.
+| Field | Value |
+| --- | --- |
+| Framework preset | None |
+| Build command | *(empty)* |
+| Build output directory | `landing` |
+| Production branch | `main` |
 
 CLI equivalent:
 
@@ -82,48 +100,46 @@ CLI equivalent:
 npx wrangler pages deploy landing --project-name typecount
 ```
 
-The root-level `wrangler.toml` was removed on purpose: with a Pages project, a
-root `wrangler.toml` containing `pages_build_output_dir` can conflict with the
-dashboard settings and with `wrangler deploy`. Keeping exactly one config, inside
-`landing/`, avoids that ambiguity.
+There is deliberately no root-level `wrangler.toml`: with a Pages project it can
+conflict with the dashboard settings. Exactly one config exists, inside
+`landing/`.
 
 ---
 
 ## Custom domain
 
 1. Project → **Custom domains** → **Set up a domain**.
-2. If the domain's DNS is on Cloudflare, the CNAME is created automatically.
+2. If DNS is on Cloudflare the CNAME is created automatically.
 3. Otherwise at your registrar: `www` → `CNAME` → `typecount.pages.dev` (or the
-   Worker's `*.workers.dev` hostname), apex → flattened CNAME/ALIAS.
+   Worker's `*.workers.dev` host), apex → flattened CNAME/ALIAS.
 4. Enable **Always Use HTTPS**.
-
----
-
-## Headers
-
-`landing/_headers` is honoured by **Pages** only. If you stay on Workers, either
-ignore it (the site works fine) or add a tiny Worker entry point that sets the
-same headers on the response.
 
 ---
 
 ## Download links
 
-The buttons call `https://api.github.com/repos/Amirmpm/typeCount/releases/latest`
-and rewrite their `href` to the newest asset, matched by filename pattern. If the
-API is rate-limited or offline they fall back to
-`github.com/Amirmpm/typeCount/releases/latest`, so a download link never breaks.
+Buttons resolve to the newest GitHub release by matching asset filenames. The
+result is cached in `sessionStorage` for six hours; on failure they fall back to
+`/releases/latest`, so a link never breaks.
+
 ---
 
-## How the live dashboard actually works
+## How the live dashboard works
 
-`landing/live.js` is a small, dependency-free counting engine that runs in the browser:
+`landing/live.js` is a dependency-free counting engine:
 
-- Listens for real `keydown`, `pointerdown`, `wheel` and `pointermove` events on the page.
-- Counts **keystrokes, clicks, scroll gestures and cursor distance** (px → metres at 96 dpi).
-- Computes WPM over a sliding 10-second window (`keys / 5` normalised to a minute) and goes to zero after 5 seconds of idle.
-- Stores per-day and per-hour buckets in `localStorage` under `typecount.live.v1`, so the 7-day view and the 365-day calendar are your own history. Nothing is sent anywhere.
-- Never counts keystrokes inside `password`, `email` or `tel` inputs, and never stores what you type — only counts. The contenteditable practice box is not read or saved.
-- Reset and Export buttons clear or download the stored JSON.
+- Listens for real `keydown`, `pointerdown`, `wheel` and `pointermove` events.
+- Counts keystrokes, clicks, scroll gestures and cursor distance (px → metres at
+  96 dpi).
+- WPM uses a sliding 10-second window (`keys / 5` normalised to a minute) and
+  drops to zero after 5 seconds of idle.
+- Stores per-day and per-hour buckets in `localStorage` under
+  `typecount.live.v1`, so the 7-day view and the 365-day calendar are your own
+  history. Nothing is uploaded.
+- Never counts keystrokes inside `password`, `email` or `tel` inputs, and never
+  stores what you type — only counts. The practice box's text is not read.
+- Reset clears the store; Export downloads it as JSON.
 
-A browser fundamentally cannot observe activity in other applications — that requires native OS input taps, which is exactly why the desktop app exists. The page says this explicitly in the "Scope, honestly" note rather than implying otherwise.
+A browser cannot observe activity in other applications — that requires native
+OS input taps, which is why the desktop app exists. The page states this
+explicitly in its "Scope, honestly" note.
