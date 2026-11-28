@@ -40,7 +40,7 @@
       <span class="brand-name">TypeCount<small>Keyboard &amp; Mouse</small></span>
     </a>
     <div class="nav-links">
-      <a href="#simulator">Simulator</a>
+      <a href="#simulator">Live dashboard</a>
       <a href="#features">Features</a>
       <a href="#privacy">Privacy</a>
       <a href="#download">Download</a>
@@ -66,7 +66,7 @@
       <p class="lede">TypeCount is a privacy-first desktop app that tracks keyboard &amp; mouse activity, typing speed, ergonomic wellness and per-app breakdowns — with native OS capture and local SQLite storage. No cloud. No key logging.</p>
       <div class="hero-actions">
         <a class="btn primary big" href="#download">⬇ Download free</a>
-        <a class="btn ghost big" href="#simulator">▶ Try the live demo</a>
+        <a class="btn ghost big" href="#simulator">▶ Count my real activity</a>
       </div>
       <ul class="hero-chips">
         <li>100% offline</li><li>Never logs what you type</li><li>Stealth mode</li><li>EN / فارسی RTL</li><li>GPLv3</li>
@@ -81,13 +81,14 @@
   </div>
 </header>
 
-<!-- ===== SIMULATOR (Overview replica) ===== -->
+<!-- ===== LIVE DASHBOARD (real activity, Overview replica) ===== -->
 <section class="sim-section" id="simulator">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="eyebrow">Interactive simulator</span>
-      <h2>The Overview page, alive in your browser</h2>
-      <p>Type in the box below — WPM, CPM and keystrokes update live, just like in the app. Or flip on auto-demo and watch the dashboard breathe.</p>
+      <span class="eyebrow">Live dashboard</span>
+      <h2>Your real activity, counted right now</h2>
+      <p>This is not a demo. Scroll, click, move your mouse and type on this page — every number below is measured from your actual input, stored only in this browser. No fake data, nothing uploaded.</p>
+      <p class="sim-scope"><strong>Scope, honestly:</strong> browsers cannot see activity in other apps. This counts genuine input on this page only — the desktop app counts everything system-wide.</p>
     </div>
 
     <div class="window reveal" id="simWindow">
@@ -111,7 +112,7 @@
             <button data-nav="Report"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>Report</button>
             <button data-nav="Settings"><svg viewBox="0 0 24 24"><path d="m9.5 3-.5 2-2 1-2-.5-2 3.5L4.5 11v2L3 15l2 3.5 2-.5 2 1 .5 2h5l.5-2 2-1 2 .5 2-3.5-1.5-2v-2L21 9l-2-3.5-2 .5-2-1-.5-2Z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button>
           </nav>
-          <div class="sim-side-foot"><span>TypeCount</span><span class="ver">1.2.0</span></div>
+          <div class="sim-side-foot"><span>TypeCount</span><span class="ver" id="simVersion">latest</span></div>
         </aside>
 
         <!-- main -->
@@ -119,9 +120,9 @@
           <div class="sim-head">
             <h3>Overview <span class="live-dot"></span></h3>
             <div class="sim-head-actions">
-              <span class="demo-badge">Demo data</span>
-              <button class="btn ghost sm" id="demoToggle" aria-pressed="false">▶ Auto-demo</button>
-              <button class="btn primary sm" data-nav="Mini mode">Mini mode</button>
+              <span class="capture-badge" id="captureStatus">● Counting live · saved in this browser only</span>
+              <button class="btn ghost sm" id="exportLive" title="Download your local activity as JSON">⭳ Export</button>
+              <button class="btn ghost sm" id="resetLive" title="Clear everything counted in this browser">↺ Reset</button>
             </div>
           </div>
 
@@ -144,16 +145,28 @@
           </div>
 
           <!-- live strip -->
-          <div class="live card">
+          <div class="live card" id="liveStrip">
             <div class="live-main">
-              <span class="live-label"><span class="live-dot"></span> Live typing</span>
+              <span class="live-label"><span class="live-dot"></span> Live typing <span class="live-state" id="liveState">waiting for input…</span></span>
               <div class="live-wpm"><strong id="liveWpm">0.0</strong><span>WPM</span></div>
-              <div class="live-sub"><span id="liveCpm">0 CPM</span><span id="liveScroll">0 scrolls</span><span id="peakWpm">Peak today: 0 WPM</span></div>
+              <div class="live-sub">
+                <span id="liveCpm">0 CPM</span>
+                <span id="liveScroll">0 scrolls this session</span>
+                <span id="peakWpm">Peak today: 0 WPM</span>
+              </div>
+              <div class="live-sub" style="margin-top:6px">
+                <span id="liveMove">0.0 m cursor travel</span>
+                <span id="liveSession">Session 0:00</span>
+              </div>
             </div>
-            <div class="live-try">
-              <label for="tryInput">✍ Try it — type here:</label>
-              <textarea id="tryInput" rows="2" placeholder="Start typing… your WPM, CPM and keystrokes update live. Nothing leaves this page."></textarea>
-              <div class="try-meta"><span>Keys: <strong id="tryKeys">0</strong></span><span>Chars: <strong id="tryChars">0</strong></span><span>Clicks on this window: <strong id="tryClicks">0</strong></span></div>
+            <div class="live-try" id="countedArea">
+              <div class="try-head">✍ Do real work here — it all counts</div>
+              <div class="try-area" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="Free typing area — your typing is counted">Start typing a sentence, paste your notes, or draft an email. Keystrokes, clicks, scrolls and cursor distance are measured as you go — the content itself is never stored or read.</div>
+              <div class="try-meta">
+                <span title="Typing inside password or email fields is never counted">⌨️ Keys counted live</span>
+                <span>🖱️ Clicks &amp; wheel</span>
+                <span>📏 Cursor metres</span>
+              </div>
             </div>
           </div>
 
@@ -161,7 +174,7 @@
           <div class="chart-grid">
             <div class="card chart-card">
               <div class="card-head">
-                <div><h4>Activity — last 24 hours</h4><p>Keystrokes per hour</p></div>
+                <div><h4>Activity over time</h4><p id="chartCaption">Today</p></div>
                 <div class="segments" id="rangeSeg">
                   <button data-range="24h" class="selected">24h</button>
                   <button data-range="7d">7d</button>
@@ -169,10 +182,13 @@
                 </div>
               </div>
               <div class="legend"><span><i class="dot kb"></i>Keyboard</span><span><i class="dot ms"></i>Mouse</span></div>
-              <div class="chart" id="hourlyChart" role="img" aria-label="Hourly activity chart"></div>
+              <div class="chart-wrap">
+                <div class="chart" id="hourlyChart" role="img" aria-label="Activity chart from your real input"></div>
+                <p class="chart-empty" id="chartEmpty">No activity recorded in this range yet.<br><span>Click, scroll or type above and the bars appear.</span></p>
+              </div>
             </div>
             <div class="card chart-card">
-              <div class="card-head"><div><h4>Activity mix</h4><p>Today</p></div></div>
+              <div class="card-head"><div><h4>Activity mix</h4><p>Your real input today</p></div></div>
               <div class="donut" id="donut"></div>
               <div class="donut-legend" id="donutLegend"></div>
             </div>
@@ -180,26 +196,26 @@
 
           <div class="chart-grid2">
             <div class="card">
-              <div class="card-head"><div><h4>Mouse odometer</h4><p>Cursor travel today</p></div><strong class="big-num" id="odoNum">0 m</strong></div>
+              <div class="card-head"><div><h4>Mouse odometer</h4><p>Real cursor travel today</p></div><strong class="big-num" id="odoNum">0 m</strong></div>
               <div class="bar-track"><div class="bar-fill" id="odoBar"></div></div>
-              <p class="quiet" id="odoNote">Daily goal: 500 m · streak: 12 days 🔥</p>
+              <p class="quiet" id="odoNote">Goal: 500 m/day · streak: 0 days</p>
             </div>
             <div class="card">
-              <div class="card-head"><div><h4>Ergonomic insights</h4><p>Strain Guard</p></div><span class="badge ok">Healthy</span></div>
-              <p class="quiet">You typed <strong id="strainKeys">4,210</strong> keys in the last hour. Take a 20-second break every 30 minutes.</p>
-              <div class="bar-track"><div class="bar-fill warn" style="width:38%"></div></div>
-              <p class="quiet">Strain level: low · Next break in ~18 min</p>
+              <div class="card-head"><div><h4>Ergonomic insights</h4><p>Strain Guard</p></div><span class="badge ok" id="strainBadge">Healthy</span></div>
+              <p class="quiet">You typed <strong id="strainKeys">0</strong> keys in the last hour. Aim for a 20-second break every 30 minutes.</p>
+              <div class="bar-track"><div class="bar-fill" id="strainBar" style="width:0%"></div></div>
+              <p class="quiet" id="strainNote">Strain level: low · nothing logged this hour yet</p>
             </div>
           </div>
 
           <!-- calendar -->
           <div class="card heatmap-card">
-            <div class="card-head"><div><h4>365-day activity calendar</h4><p>Hover a day to inspect it</p></div><span class="quiet" id="calTotal"></span></div>
+            <div class="card-head"><div><h4>365-day activity calendar</h4><p>Built from your real days · hover any cell</p></div><span class="quiet" id="calTotal"></span></div>
             <div class="heatmap" id="heatmap"></div>
             <div class="heatmap-foot"><span>Less</span><span class="heat-scale"><i class="level-0"></i><i class="level-1"></i><i class="level-2"></i><i class="level-3"></i><i class="level-4"></i></span><span>More</span></div>
           </div>
 
-          <p class="sim-note">This is a visual simulator of the Overview page. The real app adds History, Heatmap, Applications, Shortcuts, Typing Test, Report cards and Settings — <a href="#download">download it free</a>.</p>
+          <p class="sim-note">Every figure on this page is measured from your input and kept in this browser's local storage — clear it any time with Reset. For system-wide counting across all apps, <a href="#download">get the desktop app</a>.</p>
         </div>
       </div>
     </div>
@@ -279,6 +295,7 @@
   </div>
 </footer>
 
+<script src="/live.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

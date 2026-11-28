@@ -46,3 +46,16 @@ fetch("/api/latest-release")
 ```
 
 Cloudflare Pages Functions activate automatically when a `functions/` directory exists next to your output directory. Since our output directory is `landing/`, the Functions directory must be at `landing/functions/` — or set the project's build output directory to the repo root and move the site files accordingly. The simplest path is to keep the direct GitHub call (Option A/B above work as-is).
+
+## How the live dashboard actually works
+
+`landing/live.js` is a small, dependency-free counting engine that runs in the browser:
+
+- Listens for real `keydown`, `pointerdown`, `wheel` and `pointermove` events on the page.
+- Counts **keystrokes, clicks, scroll gestures and cursor distance** (px → metres at 96 dpi).
+- Computes WPM over a sliding 10-second window (`keys / 5` normalised to a minute) and goes to zero after 5 seconds of idle.
+- Stores per-day and per-hour buckets in `localStorage` under `typecount.live.v1`, so the 7-day view and the 365-day calendar are your own history. Nothing is sent anywhere.
+- Never counts keystrokes inside `password`, `email` or `tel` inputs, and never stores what you type — only counts. The contenteditable practice box is not read or saved.
+- Reset and Export buttons clear or download the stored JSON.
+
+A browser fundamentally cannot observe activity in other applications — that requires native OS input taps, which is exactly why the desktop app exists. The page says this explicitly in the "Scope, honestly" note rather than implying otherwise.
