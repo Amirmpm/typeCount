@@ -1,0 +1,11 @@
+# Cloudflare Workers (static assets) — this file is used when the
+# "Root directory" is set to /landing and the deploy command is:
+#     npx wrangler deploy
+#
+# The site is 100% static: no build step, no bundler, no dependencies.
+name = "typecount"
+compatibility_date = "2026-11-28"
+
+[assets]
+directory = "."
+not_found_handling = "404-page"

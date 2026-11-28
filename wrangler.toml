@@ -1,9 +1,0 @@
-# Cloudflare Pages — TypeCount landing (static site, no build step)
-# Deploy:  npx wrangler pages deploy landing --project-name typecount
-# Or connect this repo in Cloudflare Dashboard → Workers & Pages →
-# Create → Pages → Connect to Git, with:
-#   Build command: (leave empty)
-#   Build output directory: landing
-name = "typecount"
-compatibility_date = "2026-11-28"
-pages_build_output_dir = "landing"

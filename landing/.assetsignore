@@ -1,0 +1,7 @@
+# Files that must not be published as part of the site.
+wrangler.toml
+DEPLOY.md
+_headers
+.assetsignore
+.wrangler/
+.dev.vars
