@@ -237,6 +237,31 @@ inline int parse_version_num(const std::string& v) {
 
 @interface TypeCountMacController : NSObject <NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKScriptMessageHandler, NSSoundDelegate>
 - (void)handleCGTapEvent:(CGEventType)type event:(CGEventRef)event;
+- (std::string)effectiveLocale;
+- (bool)effectiveDark;
+- (void)savePrefs;
+- (void)applyAppearance;
+- (void)createMainWindow;
+- (void)setupWebView;
+- (void)setupStatusItem;
+- (void)rebuildStatusMenu;
+- (void)setTrayVisible:(BOOL)vis;
+- (void)setupInputTap;
+- (void)applyWindowGeometryForMode;
+- (void)showMainWindow;
+- (void)hideMainWindow:(bool)stealth;
+- (void)togglePause;
+- (void)evalJS:(const std::string&)js;
+- (void)toastKey:(const std::string&)key path:(const std::string&)pathVal;
+- (void)sendViewState;
+- (void)sendUpdateState;
+- (tc::SnapshotQuery)makeQuery;
+- (void)sendSnapshot;
+- (void)updateSportTimer;
+- (void)startUpdateCheck:(BOOL)manual;
+- (void)playPastelWav:(const std::string&)preset;
+- (void)sendNotificationTitle:(const std::string&)title body:(const std::string&)body;
+- (void)handleIpcMessage:(const std::string&)raw;
 @end
 
 @implementation TypeCountMacController {
@@ -1068,7 +1093,7 @@ static CGEventRef mac_cg_tap_callback(CGEventTapProxy proxy, CGEventType type, C
 
     NSURL* url = [NSURL URLWithString:@"https://api.github.com/repos/Amirmpm/typeCount/releases/latest"];
     NSMutableURLRequest* req = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:10.0];
-    [req setValue:@"TypeCount/" TC_VERSION_STR forHTTPHeaderField:@"User-Agent"];
+    [req setValue:[NSString stringWithFormat:@"TypeCount/%s", TC_VERSION_STR] forHTTPHeaderField:@"User-Agent"];
     [req setValue:@"application/vnd.github+json" forHTTPHeaderField:@"Accept"];
 
     [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData* data, NSURLResponse* resp, NSError* err) {

@@ -121,7 +121,16 @@ jobs:
             libxi-dev libx11-dev libxrandr-dev
       - name: Build & package Linux x64 portable .tar.gz and .deb
         run: |
-          bash scripts/build_linux.sh
+          set +e
+          bash scripts/build_linux.sh > linux_build.log 2>&1
+          RC=$?
+          cat linux_build.log
+          if [ "$RC" -ne 0 ]; then
+            ERR=$(tail -n 30 linux_build.log | tr '\n' '|' | sed 's/|/ | /g')
+            echo "::error::$ERR"
+            exit "$RC"
+          fi
+          rm -f linux_build.log
           dpkg-deb -I releases/TypeCount-v*-linux-x64-setup.deb
           dpkg-deb -c releases/TypeCount-v*-linux-x64-setup.deb
           tar -tzf releases/TypeCount-v*-linux-x64-portable.tar.gz
@@ -140,7 +149,16 @@ jobs:
           python-version: "3.11"
       - name: Build & package macOS Universal (.zip & .dmg)
         run: |
-          bash scripts/build_macos.sh
+          set +e
+          bash scripts/build_macos.sh > macos_build.log 2>&1
+          RC=$?
+          cat macos_build.log
+          if [ "$RC" -ne 0 ]; then
+            ERR=$(tail -n 30 macos_build.log | tr '\n' '|' | sed 's/|/ | /g')
+            echo "::error::$ERR"
+            exit "$RC"
+          fi
+          rm -f macos_build.log
           lipo -archs tests/bin/macos_obj/TypeCount.app/Contents/MacOS/TypeCount
           codesign --verify --deep --strict tests/bin/macos_obj/TypeCount.app
           hdiutil verify releases/TypeCount-v*-macos-universal-setup.dmg
