@@ -7,7 +7,10 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
-  const Live = window.TypeCountLive;
+  const Live = window.TypeCountLive || null;
+  if (!Live) {
+    if (window.console) console.error("[TypeCount] live.js failed to load — dashboard disabled, page still works.");
+  }
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ═════════ toast ═════════ */
@@ -522,11 +525,32 @@
     }, 1000);
   }
 
-  const first = Live.snapshot();
-  render(first);
-  renderCalendar(first);
-  Live.subscribe((s) => { render(s); renderCalendar(s); });
-  Live.subscribeLive((s) => { renderHero(s); renderKpis(s); renderLive(s); });
+  /* The dashboard must never take the page down with it: if anything throws
+     while rendering, log once and keep the rest of the site fully usable. */
+  let dashboardBroken = false;
+  function safe(fn, arg) {
+    if (dashboardBroken) return;
+    try { fn(arg); }
+    catch (err) {
+      dashboardBroken = true;
+      if (window.console) console.error("[TypeCount] dashboard render failed:", err);
+    }
+  }
+
+  if (Live && typeof Live.snapshot === "function") {
+    const first = safe(() => Live.snapshot());
+    if (first) {
+      safe(render, first);
+      safe(renderCalendar, first);
+    }
+    Live.subscribe((s) => { safe(render, s); safe(renderCalendar, s); });
+    Live.subscribeLive((s) => {
+      if (dashboardBroken) return;
+      safe(renderHero, s);
+      safe(renderKpis, s);
+      safe(renderLive, s);
+    });
+  }
 
   /* ═════════ tabs (proper ARIA + keyboard) ═════════ */
   const tabs = $$('.tab[role="tab"]');
@@ -576,7 +600,10 @@
     });
   }
 
-  /* ═════════ reset / export ═════════ */
+  /* ═════════ reset / export (only if the engine loaded) ═════════ */
+  if (!Live) {
+    // still wire the rest of the page, just without data features
+  }
   const resetBtn = $("#resetLive");
   if (resetBtn) {
     resetBtn.addEventListener("click", () => {
